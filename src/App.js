@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+// @ts-nocheck
 import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, insertWorker, insertCampaign, updateCampaign, deleteCampaign, updateReportStatus, insertBoleta } from "./supabase";
 
 
