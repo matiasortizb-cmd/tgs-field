@@ -6,9 +6,11 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // AUTH
+export const signUp = (email, password) => supabase.auth.signUp({ email, password });
 export const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
 export const signOut = () => supabase.auth.signOut();
 export const getSession = () => supabase.auth.getSession();
+export const getWorkerByEmail = (email) => supabase.from('workers').select('*').eq('email', email).single();
 
 // WORKERS
 export const getWorkers = () => supabase.from('workers').select('*').order('name');
@@ -36,6 +38,8 @@ export const getMyReports = (workerName) =>
 export const insertReport = (r) => supabase.from('reports').insert(r).select().single();
 export const updateReportStatus = (id, status, comment) =>
   supabase.from('reports').update({ status, supervisor_comment: comment }).eq('id', id);
+export const updateReportApproval = (id, status, comment, supervisorName) =>
+  supabase.from('reports').update({ status, supervisor_comment: comment, approved_by: supervisorName }).eq('id', id);
 
 // BOLETAS
 export const getBoletas = (campaignId) => {
