@@ -1,0 +1,23 @@
+# Keep Supabase project alive: pings REST endpoint every 3 days so the
+# free-tier project doesn't pause after a week of inactivity.
+# The anon key is public (same one in src/supabase.js / frontend bundle).
+
+name: Keep Supabase alive
+
+on:
+  schedule:
+    - cron: '0 12 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://ogdpxcrsfhncvmukrodm.supabase.co/rest/v1/workers?select=id&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nZHB4Y3JzZmhuY3ZtdWtyb2RtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NzQyNjksImV4cCI6MjA5MDU1MDI2OX0.3gywVydN0LXhp-wrPe2vxOB9RUh2hzLoSLvsJbqXAPA" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nZHB4Y3JzZmhuY3ZtdWtyb2RtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NzQyNjksImV4cCI6MjA5MDU1MDI2OX0.3gywVydN0LXhp-wrPe2vxOB9RUh2hzLoSLvsJbqXAPA")
+          echo "HTTP $RESPONSE"
+          [ "$RESPONSE" = "200" ] || exit 1
