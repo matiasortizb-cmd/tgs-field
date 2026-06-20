@@ -2723,6 +2723,22 @@ const LoginScreen=({onLogin,onRegister})=>{
   const [showPw,setShowPw]=useState(false);
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
+  const [remember,setRemember]=useState(true);
+
+  useEffect(()=>{
+    try{
+      const saved=JSON.parse(localStorage.getItem("tgs_login")||"null");
+      if(saved){
+        if(saved.email) setEmail(saved.email);
+        if(saved.pass) setPass(saved.pass);
+      }
+    }catch{}
+  },[]);
+
+  const persistCreds=()=>{
+    if(remember) localStorage.setItem("tgs_login",JSON.stringify({email:email.trim().toLowerCase(),pass}));
+    else localStorage.removeItem("tgs_login");
+  };
 
   const handle=async()=>{
     // TODO REMOVE: bypass temporal mientras Supabase Email provider está disabled
@@ -2737,6 +2753,7 @@ const LoginScreen=({onLogin,onRegister})=>{
       };
       const prof=devProfiles[email.trim().toLowerCase()];
       if(prof){
+        persistCreds();
         onLogin({id:"dev-bypass-"+prof.role,name:prof.name,email:email.trim().toLowerCase(),roles:[prof.role],status:"activo",role:prof.role});
         return;
       }
@@ -2750,6 +2767,7 @@ const LoginScreen=({onLogin,onRegister})=>{
       if(wErr||!rawWorker) throw new Error("No se encontró tu perfil. ¿Ya te registraste?");
       const worker=normalizeWorker(rawWorker);
       const role=worker.roles?.includes("admin")?"admin":worker.roles?.includes("supervisor")?"supervisor":worker.roles?.[0]||"implementador";
+      persistCreds();
       onLogin({...worker,role});
     }catch(e){setErr(e.message||"Error al iniciar sesión");}
     setLoading(false);
@@ -2783,6 +2801,12 @@ const LoginScreen=({onLogin,onRegister})=>{
               {showPw?"Ocultar":"Mostrar"}
             </button>
           </div>
+
+          <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,cursor:"pointer",userSelect:"none"}}>
+            <input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)}
+              style={{width:16,height:16,accentColor:T.primary,cursor:"pointer"}}/>
+            <span style={{fontSize:13,color:T.text,fontWeight:500}}>Recordar mis datos en este dispositivo</span>
+          </label>
 
           {err && (
             <div style={{marginBottom:14,padding:"10px 12px",background:"#FEF2F2",border:`1px solid ${T.danger}33`,borderRadius:T.rBtn,color:T.danger,fontSize:13,fontWeight:500}}>{err}</div>
