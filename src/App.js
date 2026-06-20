@@ -648,13 +648,33 @@ const ApprovalTab=({reports,setReports,allCampaigns,vertical,user})=>{
       </div>
 
       {filtered.length===0 ? (
-        <div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"40px 20px",textAlign:"center",color:C.muted,fontSize:13}}>No hay reportes con este estado.</div>
+        <div style={{background:C.surface,border:`1px dashed ${C.border}`,padding:"40px 20px",textAlign:"center",color:C.muted,fontSize:13,borderRadius:12}}>No hay reportes con este estado.</div>
       ) : (
-        <div style={{display:"grid",gap:8}}>
-          {filtered.map(r=>{
+        <div style={{display:"grid",gap:28}}>
+          {(()=>{
+            const byCamp=new Map();
+            filtered.forEach(r=>{
+              const cid=r.campaignId||"_uncat";
+              if(!byCamp.has(cid)) byCamp.set(cid,[]);
+              byCamp.get(cid).push(r);
+            });
+            return Array.from(byCamp,([cid,items])=>{
+              const camp=allCampaigns.find(c=>c.id===cid);
+              const title=camp?.name||"Sin campaña";
+              const client=camp?.client;
+              return(
+                <section key={cid}>
+                  <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:12,marginBottom:10,paddingBottom:8,borderBottom:`1px solid ${C.border}`}}>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-0.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{title}</div>
+                      {client && <div style={{fontSize:12,color:C.muted,fontWeight:500,marginTop:2}}>{client}</div>}
+                    </div>
+                    <span style={{fontSize:11,color:C.muted,fontWeight:600,whiteSpace:"nowrap"}}>{items.length} reporte{items.length!==1?"s":""}</span>
+                  </div>
+                  <div style={{display:"grid",gap:8}}>
+                    {items.map(r=>{
             const vt=VERTICALS[r.type];
             const st=REPORT_STATUS[r.status];
-            const camp=allCampaigns.find(c=>c.id===r.campaignId);
             const isPending=r.status==="pending";
             return(
               <div key={r.id} onClick={()=>setModal(r)}
@@ -691,7 +711,12 @@ const ApprovalTab=({reports,setReports,allCampaigns,vertical,user})=>{
                 {isPending && <div style={{textAlign:"right",marginTop:10,fontSize:12,color:C.orange,fontWeight:600}}>Revisar →</div>}
               </div>
             );
-          })}
+                    })}
+                  </div>
+                </section>
+              );
+            });
+          })()}
         </div>
       )}
     </div>
