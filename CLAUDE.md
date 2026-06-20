@@ -9,7 +9,7 @@ Plataforma web para gestionar campañas de terreno de la Agencia TGS (activacion
 - Mapas: `react-leaflet` + `leaflet`
 - Reportería PPT: `pptxgenjs@3.12.0` (ver "Decisiones")
 - Excel: `xlsx`
-- Deploy: Vercel → `campo.agenciatgs.cl` (CNAME en Hostinger → `cname.vercel-dns.com`)
+- Deploy: Vercel → `campo.agenciatgs.cl` (CNAME en Planeta Hosting → `cname.vercel-dns.com`)
 
 ## Estructura
 
@@ -34,7 +34,7 @@ Todos los roles tienen al registrarse: teléfono, dirección (calle, número, de
   - Tablas: `workers`, `campaigns`, `reports`, `boletas`
   - Storage buckets: `photos`, `boletas`, `avatars`
   - **Email confirmation desactivado** en Auth (decisión, ver abajo)
-- DNS: Hostinger, CNAME `campo` → `cname.vercel-dns.com`
+- DNS: Planeta Hosting, CNAME `campo` → `cname.vercel-dns.com`
 - Deploy: `npx vercel`
 
 ## Usuarios demo (testing)
@@ -91,6 +91,50 @@ Decisión tomada el 5 de mayo de 2026 después de extraer la identidad de TGS de
 - Reportería de cliente recién terminada con `pptxgenjs@3` funcionando.
 - **Sin verificar**: si se llegó a deployar a Vercel después de este último cambio.
 - **Pendiente probable**: parte "editar con AI" del reporte — confirmar si quedó funcional o sólo preview + descarga.
+
+## Estado al 20 de junio de 2026
+
+Se commiteó y deployó a producción un bloque grande (`e12ed4d` y siguientes) que incluye:
+
+- **Auth real con Supabase**: `LoginScreen` con email/password (`signIn`, `signUp`, `getSession`, `getWorkerByEmail`), `PendingScreen` para workers con status `pendiente`.
+- **Componente `Icon`** SVG inline en lugar de emojis para nav y UIs.
+- **Mapa real con Leaflet**: `WorkerMap`, `WorkerMapCampaignSelect`, `CampaignMapView` (tilelayer CARTO, popups con WhatsApp).
+- **Campañas con salas georreferenciadas + Excel**: `salas[{name,chain,address,lat,lng}]`, plantilla descargable, upload `.xlsx`, helper `migrateInitial` para campañas viejas con `points`/`activationPoints` planos.
+- **Registro** con `COMUNAS_POR_REGION` dependiente y submit real a Supabase.
+- **`ClientReport`** integrado como tab en `AdminApp` y botón en el detalle de cada campaña.
+- **`uploadBoleta`** y **`uploadPhoto`** reales contra Supabase storage.
+- **`vercel.json`** simplificado a `rewrites`.
+
+Encima de eso (commits posteriores):
+
+- **`add keepalive workflow para Supabase`** (`001a90b`): `.github/workflows/keepalive.yml` con cron `0 12 */3 * *` que hace un SELECT trivial en `workers`. Necesario porque el free tier pausa proyectos a los ~7 días sin queries. Anon key hardcodeada (es pública).
+- **`agrupar aprobaciones por campaña`** (`631949f`): `ApprovalTab` agrupa los reportes filtrados bajo un header por campaña (nombre + cliente + contador). Aplica a los tres tipos (impl/promo/mec) porque el componente es compartido.
+- **`Recordar mis datos`** en LoginScreen (`afc532b`): checkbox marcado por default que persiste email + password en `localStorage` (`tgs_login`) y prefillea al cargar. Funciona tanto con bypass como con flow Supabase real.
+
+### Bypass temporal de login (¡revertir!)
+
+Commits `26ed47d`, `2176e54`, `cabcd63` agregan un bypass en `LoginScreen.handle` para destrabar testing mientras el provider Email de Supabase está disabled en el dashboard. Marcados con `// TODO REMOVE`. Credenciales (todas con password `tgsdev2026`):
+
+- `dev@tgs.cl` / `dev-admin@tgs.cl` → Administrador TGS (admin)
+- `dev-super@tgs.cl` → Rosa Ibáñez (supervisor)
+- `dev-impl@tgs.cl` → Carlos Muñoz (implementador)
+- `dev-promo@tgs.cl` → Ana Soto (promotor)
+- `dev-mec@tgs.cl` → Mario Vega (mecanizador)
+
+**Revertir**: `git revert cabcd63 2176e54 26ed47d` cuando el provider Email quede habilitado.
+
+### TODOs activos en infraestructura
+
+1. **Habilitar Email provider en Supabase** (Authentication → Providers → Email → toggle "Enable email provider" ON). Está como Disabled, por eso ningún login real funciona.
+2. **Desactivar "Confirm email"** (donde sea que esté en la versión actual del dashboard). El default tras resume es ON y rompe los logins demo.
+3. **Revertir el bypass** una vez resuelto lo anterior.
+4. **Considerar upgrade Supabase Pro** ($25/mes) para evitar pausas y depender del keepalive.
+
+### Operativa de deploy
+
+- `git push origin main` dispara auto-deploy de Vercel (integración GitHub↔Vercel ya configurada).
+- Vercel CLI requiere `vercel login` interactivo cuando se quiere deploy manual (la sesión expiró).
+- Credenciales GitHub: PAT con scopes **`repo` + `workflow`** (el segundo es obligatorio para tocar `.github/workflows/`), guardado en macOS Keychain via `git credential approve`. URL del remote sin token incrustado.
 
 ## Comandos útiles
 
