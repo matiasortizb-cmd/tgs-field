@@ -2702,10 +2702,17 @@ const LoginScreen=({onLogin,onRegister})=>{
   const handle=async()=>{
     // TODO REMOVE: bypass temporal mientras Supabase Email provider está disabled
     if(pass==="tgsdev2026"){
-      const devMap={"dev@tgs.cl":"admin","dev-admin@tgs.cl":"admin","dev-super@tgs.cl":"supervisor","dev-impl@tgs.cl":"implementador","dev-promo@tgs.cl":"promotor","dev-mec@tgs.cl":"mecanizador"};
-      const devRole=devMap[email.trim().toLowerCase()];
-      if(devRole){
-        onLogin({id:"dev-bypass-"+devRole,name:"Dev "+devRole.charAt(0).toUpperCase()+devRole.slice(1),email:email.trim().toLowerCase(),roles:[devRole],status:"activo",role:devRole});
+      const devProfiles={
+        "dev@tgs.cl":{role:"admin",name:"Administrador TGS"},
+        "dev-admin@tgs.cl":{role:"admin",name:"Administrador TGS"},
+        "dev-super@tgs.cl":{role:"supervisor",name:"Rosa Ibáñez"},
+        "dev-impl@tgs.cl":{role:"implementador",name:"Carlos Muñoz"},
+        "dev-promo@tgs.cl":{role:"promotor",name:"Ana Soto"},
+        "dev-mec@tgs.cl":{role:"mecanizador",name:"Mario Vega"},
+      };
+      const prof=devProfiles[email.trim().toLowerCase()];
+      if(prof){
+        onLogin({id:"dev-bypass-"+prof.role,name:prof.name,email:email.trim().toLowerCase(),roles:[prof.role],status:"activo",role:prof.role});
         return;
       }
     }
