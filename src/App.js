@@ -2701,9 +2701,13 @@ const LoginScreen=({onLogin,onRegister})=>{
 
   const handle=async()=>{
     // TODO REMOVE: bypass temporal mientras Supabase Email provider está disabled
-    if(email.trim().toLowerCase()==="dev@tgs.cl"&&pass==="tgsdev2026"){
-      onLogin({id:"dev-bypass",name:"Dev Admin",email:"dev@tgs.cl",roles:["admin"],status:"activo",role:"admin"});
-      return;
+    if(pass==="tgsdev2026"){
+      const devMap={"dev@tgs.cl":"admin","dev-admin@tgs.cl":"admin","dev-super@tgs.cl":"supervisor","dev-impl@tgs.cl":"implementador","dev-promo@tgs.cl":"promotor","dev-mec@tgs.cl":"mecanizador"};
+      const devRole=devMap[email.trim().toLowerCase()];
+      if(devRole){
+        onLogin({id:"dev-bypass-"+devRole,name:"Dev "+devRole.charAt(0).toUpperCase()+devRole.slice(1),email:email.trim().toLowerCase(),roles:[devRole],status:"activo",role:devRole});
+        return;
+      }
     }
     if(!email.trim()||pass.length<6){setErr("Email y contraseña (mín. 6 caracteres) requeridos");return;}
     setLoading(true);setErr("");
