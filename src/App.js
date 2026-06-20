@@ -2700,6 +2700,11 @@ const LoginScreen=({onLogin,onRegister})=>{
   const [loading,setLoading]=useState(false);
 
   const handle=async()=>{
+    // TODO REMOVE: bypass temporal mientras Supabase Email provider está disabled
+    if(email.trim().toLowerCase()==="dev@tgs.cl"&&pass==="tgsdev2026"){
+      onLogin({id:"dev-bypass",name:"Dev Admin",email:"dev@tgs.cl",roles:["admin"],status:"activo",role:"admin"});
+      return;
+    }
     if(!email.trim()||pass.length<6){setErr("Email y contraseña (mín. 6 caracteres) requeridos");return;}
     setLoading(true);setErr("");
     try{
