@@ -595,9 +595,11 @@ const PaymentsTab=({allCampaigns,reports,workers})=>{
 };
 
 // ─── APPROVAL TAB ─────────────────────────────────────────────────────────────
-const ApprovalTab=({reports,setReports,allCampaigns,vertical,user})=>{
+const ApprovalTab=({reports,setReports,allCampaigns,vertical,user,filterStatus:fsExternal,setFilterStatus:setFsExternal})=>{
   const [modal,setModal]=useState(null);
-  const [filterStatus,setFilterStatus]=useState("pending");
+  const [fsInternal,setFsInternal]=useState("pending");
+  const filterStatus=fsExternal!==undefined?fsExternal:fsInternal;
+  const setFilterStatus=setFsExternal||setFsInternal;
 
   const relevant=reports.filter(r=>r.type===vertical||(vertical==="all"));
   const filtered=filterStatus==="all"?relevant:relevant.filter(r=>r.status===filterStatus);
@@ -2018,6 +2020,15 @@ const AdminApp=({user,onLogout})=>{
   const [selected,setSel]    =useState(null);
   const [newType,setNewType] =useState(null);
   const [reportCamp,setReportCamp]=useState(null);
+  const [approvalStatus,setApprovalStatus]=useState("pending");
+  const [campaignStatusFilter,setCampaignStatusFilter]=useState(null);
+
+  const goToTab=(t,opts={})=>{
+    setView("list");setSel(null);setNewType(null);
+    if(opts.approvalStatus) setApprovalStatus(opts.approvalStatus);
+    if(opts.campaignStatusFilter!==undefined) setCampaignStatusFilter(opts.campaignStatusFilter);
+    setTab(t);
+  };
 
   useEffect(()=>{
     const load=async()=>{
@@ -2111,16 +2122,24 @@ const AdminApp=({user,onLogout})=>{
 
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:32}}>
             {[
-              {lbl:"Campañas activas",val:campaigns.filter(c=>c.status==="activa").length,color:vt.color,emphasis:true},
-              {lbl:"Reportes hoy",    val:reports.filter(r=>r.type===vertical).length,color:C.text},
-              {lbl:"Pendientes",      val:reports.filter(r=>r.type===vertical&&r.status==="pending").length,color:C.orange},
-              {lbl:"Aprobados",       val:reports.filter(r=>r.type===vertical&&r.status==="approved").length,color:C.green},
-            ].map(({lbl,val,color,emphasis})=>(
-              <div key={lbl} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",position:"relative",overflow:"hidden"}}>
+              {lbl:"Campañas activas",val:campaigns.filter(c=>c.status==="activa").length,color:vt.color,emphasis:true,onClick:()=>goToTab("campaigns",{campaignStatusFilter:"activa"})},
+              {lbl:"Reportes hoy",    val:reports.filter(r=>r.type===vertical).length,color:C.text,onClick:()=>goToTab("approvals",{approvalStatus:"all"})},
+              {lbl:"Pendientes",      val:reports.filter(r=>r.type===vertical&&r.status==="pending").length,color:C.orange,onClick:()=>goToTab("approvals",{approvalStatus:"pending"})},
+              {lbl:"Aprobados",       val:reports.filter(r=>r.type===vertical&&r.status==="approved").length,color:C.green,onClick:()=>goToTab("approvals",{approvalStatus:"approved"})},
+            ].map(({lbl,val,color,emphasis,onClick})=>(
+              <button key={lbl} onClick={onClick}
+                style={{textAlign:"left",background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",position:"relative",overflow:"hidden",cursor:"pointer",fontFamily:f.b,transition:"border-color .15s, box-shadow .15s, transform .1s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=color;e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.06)";}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.boxShadow="none";}}
+                onMouseDown={e=>{e.currentTarget.style.transform="translateY(1px)";}}
+                onMouseUp={e=>{e.currentTarget.style.transform="translateY(0)";}}>
                 {emphasis && <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:color}}/>}
-                <div style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:0.4,marginBottom:8,textTransform:"uppercase"}}>{lbl}</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:0.4,textTransform:"uppercase"}}>{lbl}</span>
+                  <Icon name="arrow" size={12} color={C.muted}/>
+                </div>
                 <div style={{fontSize:30,fontWeight:700,color:emphasis?C.text:color,lineHeight:1,letterSpacing:-1}}>{val}</div>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -2397,7 +2416,7 @@ const AdminApp=({user,onLogout})=>{
         })()}
 
         {/* APROBACIONES */}
-        {tab==="approvals"&&<ApprovalTab reports={reports} setReports={setReports} allCampaigns={allCampaigns} vertical={vertical} user={user}/>}
+        {tab==="approvals"&&<ApprovalTab reports={reports} setReports={setReports} allCampaigns={allCampaigns} vertical={vertical} user={user} filterStatus={approvalStatus} setFilterStatus={setApprovalStatus}/>}
 
         {/* REPORTES CLIENTE */}
         {tab==="reports"&&<>
