@@ -135,6 +135,90 @@ Commits `26ed47d`, `2176e54`, `cabcd63` agregan un bypass en `LoginScreen.handle
 - `git push origin main` dispara auto-deploy de Vercel (integración GitHub↔Vercel ya configurada).
 - Vercel CLI requiere `vercel login` interactivo cuando se quiere deploy manual (la sesión expiró).
 - Credenciales GitHub: PAT con scopes **`repo` + `workflow`** (el segundo es obligatorio para tocar `.github/workflows/`), guardado en macOS Keychain via `git credential approve`. URL del remote sin token incrustado.
+- Si Vercel no buildea un push (le pasó al 22/06 con `fdd4c5c`), hacer `git commit --allow-empty -m "chore: trigger Vercel rebuild" && git push` para forzar el webhook.
+
+## Estado al 22 de junio de 2026
+
+Bloque grande de mejoras al flow de **clientes, items por reporte, asignación de salas, aprobación granular y corrección de rechazos**.
+
+### Schema nuevo en Supabase (ALTER aplicados)
+
+- `workers.address_detail text` — depto/oficina libre
+- `campaigns.salas jsonb` — array de `{name, chain, address, lat, lng, assignedTo:[workerName]}`
+- `campaigns.supervisors text[]`
+- `campaigns.client_id uuid` (FK a `clients`)
+- `reports.items jsonb` — array de `{name, photo, note, status, supervisorNote}`
+- `reports.signed_photo text` — URL de la guía de despacho firmada
+- `reports.approved_by text`
+- Tabla nueva `clients (id, name, logo_url, contact_name, contact_email, contact_phone, notes, created_at)` con RLS abierta
+- Buckets de storage: agregadas policies INSERT/SELECT/UPDATE para anon en `avatars`, `photos`, `boletas`, `client-logos` (sin DELETE, así nadie borra ajeno). El bucket `client-logos` se creó nuevo.
+
+### Mappers camelCase ↔ snake_case en `src/supabase.js`
+
+- `toDbCampaign` / `fromDbCampaign` (igual filosofía que `toDbReport` / `fromDbReport`)
+- `toDbReport` / `fromDbReport` — el form usa `user/date/photos/geo/issueNote/popOk/...`; la tabla usa `worker_name/created_at/photos_urls/lat-lng/issue_note/pop_ok/...`
+- `fromDbReport` deriva `date` formateado desde `created_at`, y reconstruye `geo: {lat,lng}` desde columnas separadas
+- `photos_urls` es ARRAY en la tabla; mapper aplana el objeto `{a,b,c}` del form a array al insert y al revés en read
+
+### Sistema de clientes (CRUD + análisis)
+
+- `ClientsTab`, `ClientForm` (modal con upload de logo), `ClientDetail` (KPIs + lista de campañas)
+- Tab "Clientes" en navbar admin (entre Inicio y Campañas)
+- `CampaignForm` cambia el input libre por **dropdown de clientes** + opción "+ Crear nuevo cliente" que abre el `ClientForm` en modal y prefillea la campaña
+- `fromDbCampaign` está al día con `client_id`; UI tolera ambas formas (string `client` o id)
+
+### Items por reporte + aprobación granular
+
+- Los 3 forms (`ImplForm`, `PromoForm`, `MecForm`) usan `ReportItemsList` compartido (a nivel módulo): lista dinámica de `items[]` con nombre + foto + nota
+- Foto general opcional aparte (vista del PdV / vista del lugar)
+- ApprovalModal muestra los items con miniaturas, estado por item, botones aprobar/rechazar individuales y textarea para `supervisorNote` cuando se rechaza
+- `updateReportItems(id, items)` persiste cambios granulares (status + nota) sin tocar el resto del reporte
+- Botones globales del reporte (Aprobar/Rechazar/Solicitar corrección) siguen vivos
+
+### Asignación de salas por worker
+
+- Cada sala dentro de la campaña tiene `assignedTo: [workerName]`
+- `CampaignForm` muestra pills toggleables (uno por integrante del team) abajo de cada sala
+- Nuevo flow del field worker: CampaignSelect → **SalaSelect** (lista solo las salas asignadas a él) → form de reporte con la sala precargada como card readonly
+- Si la campaña no tiene salas asignadas (campañas viejas), salta SalaSelect y va directo al form (compatibilidad)
+
+### Flow de rechazos completo
+
+1. **Supervisor**: rechaza item → textarea para `supervisorNote` por item. Botón verde "Avisar al worker por WhatsApp" en el modal abre `wa.me` con mensaje precargado (nombre, sala, items rechazados con sus notas, comentario global). Si el worker no tiene phone, advierte.
+2. **Worker (LandingScreen)**: banner rojo expandible "Tenés N reportes con observaciones" + lista de campañas afectadas. Click → navega directo a SalaSelect de esa campaña. Cada vertical (Impl/Promo/Mec) muestra badge circular con número de rechazos.
+3. **Worker (CampaignSelect / SalaSelect)**: card de campaña / sala con observaciones queda con borde rojo + pill "Con observaciones" + CTA cambia a "Corregir →".
+4. **Worker (form)**: ImplForm/PromoForm/MecForm aceptan `initialReport`. Items **aprobados** quedan readonly (borde verde, pill APROBADO). Items **rechazados** quedan editables con la nota del supervisor visible arriba ("Supervisor: …"). Botón cambia a "Reenviar reporte corregido".
+5. **Submit en modo corrección**: hace `updateReport(id, payload)` en lugar de insert. Conserva el id del reporte; los items aprobados conservan status, los corregidos vuelven a `pending`.
+
+### Selector de rol en el TopBar
+
+- `RoleSwitchBanner` sticky debajo del TopBar (no el select chico del header, ese quedó atrás). Pills horizontales con cada rol del worker; cambiar rol re-renderiza la app (AdminApp vs LandingScreen) según corresponda.
+- Aplica si el user tiene ≥2 roles. Funciona tanto en AdminApp como en LandingScreen.
+
+### UX del registro y uploads
+
+- RUT auto-formateado mientras se tipea (`12.345.678-9`)
+- Foto de perfil con bottom-sheet **Tomar foto / Elegir desde archivos / Cancelar** (PhotoSlot también usa el mismo menú para fotos de reporte)
+- `<label htmlFor>` envolviendo inputs para respetar `capture` en Safari iOS
+- `uploadPhoto` sanitiza el path: NFD + replace de no-alfanuméricos → evita "Invalid key" cuando el label tiene tildes/espacios ("Guía firmada" → "Guia-firmada")
+- Foto de **guía de despacho firmada** cuando el worker marca "Firma del local"
+- Registro idempotente: si signUp da "already registered" y no hay worker, completa el insert (recupera intentos previos fallidos)
+- Inputs del CampaignForm no perdían el foco al tipear: `Section`/`PersonRow` movidos a nivel módulo (`FormPersonRow`)
+
+### Dashboard admin
+
+- 4 KPI cards de la pantalla "Inicio" son **clicables** y navegan al área correspondiente (Campañas activas → tab Campañas, Reportes hoy/Pendientes/Aprobados → tab Aprobar con el filtro seteado)
+- `ApprovalTab` agrupa los reportes filtrados por **campaña** con header (nombre + cliente + count)
+
+### Avatares y fotos
+
+- Helper `avatarContent(photo, name)` decide si renderizar `<img>` (cuando es URL) o iniciales (legacy). Aplicado en los 5 lugares del código que renderizaban avatar (PersonRow, listado de workers, detalle del worker, LandingScreen, etc.)
+
+### TODOs activos al 22 de junio
+
+1. **Email provider de Supabase sigue Disabled** y "Confirm email" prendido — el bypass `tgsdev2026` sigue siendo el único login funcional. Cuando se destrabe, revertir los commits del bypass.
+2. **Migración Fase 3 de clientes** (mover strings `Coca-Cola`, `Mars`, etc. a registros reales con `client_id`) — el SQL está documentado pero no se corrió.
+3. **Pre-carga de reporte para Promo/Mec**: replicado el patrón. Los forms cambiaron de fotos fijas a items dinámicos: si hay reportes viejos en producción con la estructura anterior, mostrarlos puede dar nulls.
 
 ## Comandos útiles
 
