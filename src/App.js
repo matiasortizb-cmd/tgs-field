@@ -3131,18 +3131,90 @@ const SubmitBtn=({disabled,onClick,loading,children,accent=C.impl})=>(
   </button>
 );
 
-const MecForm=({campaign,sala,onSubmit,onBack,user})=>{
-  const [form,setForm]=useState({location:sala?.name||"",units:"",material:campaign.material||"",issues:false,issueNote:""});
-  const [photos,setPhotos]=useState({before:null,after:null});
+// Componente compartido para la sección "Elementos" de los reportes (Impl/Promo/Mec)
+const ReportItemsList=({items,setItems,itemNoun="elemento",namePlaceholder="Nombre del elemento"})=>{
+  const editItem=(i,k,v)=>setItems(prev=>prev.map((it,j)=>j===i?{...it,[k]:v}:it));
+  const addItem=()=>setItems(prev=>[...prev,{name:"",photo:null,note:""}]);
+  const removeItem=(i)=>setItems(prev=>prev.filter((_,j)=>j!==i));
+  return (
+    <>
+      <div style={{display:"grid",gap:12}}>
+        {items.map((it,i)=>{
+          const wasRejected=it._status==="rejected";
+          const wasApproved=it._status==="approved";
+          return (
+            <div key={i} style={{background:C.surfaceHi,border:`1px solid ${wasRejected?C.red+"55":wasApproved?C.green+"55":C.border}`,borderRadius:12,padding:"12px 14px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:10,fontWeight:700,letterSpacing:0.5,color:C.muted,textTransform:"uppercase"}}>{itemNoun.charAt(0).toUpperCase()+itemNoun.slice(1)} {i+1}</span>
+                  {wasRejected && <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px",borderRadius:999,fontSize:9,fontWeight:700,background:C.red+"15",color:C.red,border:`1px solid ${C.red}33`,letterSpacing:0.3}}>RECHAZADO</span>}
+                  {wasApproved && <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px",borderRadius:999,fontSize:9,fontWeight:700,background:C.green+"15",color:C.green,border:`1px solid ${C.green}33`,letterSpacing:0.3}}>APROBADO</span>}
+                </div>
+                {items.length>1 && !wasApproved && (
+                  <button type="button" onClick={()=>removeItem(i)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",padding:4,display:"inline-flex"}} title="Quitar">
+                    <Icon name="x" size={14}/>
+                  </button>
+                )}
+              </div>
+              {wasRejected && it.supervisorNote && (
+                <div style={{background:C.red+"12",border:`1px solid ${C.red}33`,borderLeft:`3px solid ${C.red}`,borderRadius:8,padding:"8px 11px",marginBottom:8,fontSize:12,color:C.text,fontWeight:500,lineHeight:1.4}}>
+                  <span style={{color:C.red,fontWeight:700}}>Supervisor:</span> {it.supervisorNote}
+                </div>
+              )}
+              <input value={it.name} onChange={e=>editItem(i,"name",e.target.value)} disabled={wasApproved} placeholder={namePlaceholder}
+                style={{width:"100%",background:wasApproved?C.surfaceHi:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 11px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:8,opacity:wasApproved?0.7:1}}/>
+              {wasApproved && it.photo ? (
+                <div style={{position:"relative",borderRadius:10,overflow:"hidden",aspectRatio:"4/3"}}>
+                  <img src={it.photo} alt={it.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                </div>
+              ) : (
+                <PhotoSlot label={it.name||`Foto del ${itemNoun}`} captured={it.photo} onCapture={url=>editItem(i,"photo",url)}/>
+              )}
+              <textarea value={it.note} onChange={e=>editItem(i,"note",e.target.value)} disabled={wasApproved} placeholder="Nota (opcional)"
+                style={{width:"100%",minHeight:48,background:wasApproved?C.surfaceHi:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 11px",color:C.text,fontFamily:f.b,fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",marginTop:8,opacity:wasApproved?0.7:1}}/>
+            </div>
+          );
+        })}
+      </div>
+      <button type="button" onClick={addItem} style={{width:"100%",marginTop:10,background:"transparent",border:`1px dashed ${C.border}`,color:C.muted,borderRadius:10,padding:"10px",fontFamily:f.b,fontSize:13,fontWeight:600,cursor:"pointer"}}>+ Agregar otro {itemNoun}</button>
+    </>
+  );
+};
+
+// Helper para seedear items desde un reporte previo (modo corrección)
+const seedItemsFromReport=(initialReport,fallback)=>{
+  if(initialReport?.items?.length){
+    return initialReport.items.map(it=>({...it,_status:it.status,status:it.status==="rejected"?"pending":it.status}));
+  }
+  return fallback;
+};
+const cleanItemsForSubmit=(items)=>items.filter(it=>it.name.trim()&&it.photo).map(it=>({
+  name:it.name.trim(),photo:it.photo,note:it.note||"",
+  status: it._status==="approved" ? "approved" : "pending",
+  supervisorNote: it.supervisorNote||""
+}));
+
+const MecForm=({campaign,sala,onSubmit,onBack,user,initialReport})=>{
+  const [form,setForm]=useState({
+    location:sala?.name||initialReport?.location||"",
+    units:initialReport?.units||"",
+    material:initialReport?.material||campaign.material||"",
+    issues:initialReport?.issues||false,
+    issueNote:initialReport?.issueNote||""
+  });
+  const [items,setItems]=useState(()=>seedItemsFromReport(initialReport,[{name:"",photo:null,note:""}]));
   const [sending,setSending]=useState(false);
   const ts=nowStr();
   const handleSubmit=async()=>{
     setSending(true);
-    await onSubmit({type:"mec",campaignId:campaign.id,user:user?.name,status:"pending",date:ts,
+    const cleanItems=cleanItemsForSubmit(items);
+    const payload={type:"mec",campaignId:campaign.id,user:user?.name,status:"pending",date:ts,
       location:form.location,units:parseInt(form.units)||0,material:form.material,
+      items:cleanItems,
       issues:form.issues,issueNote:form.issueNote,
-      photos:{a:photos.before,b:photos.after},
-    });
+      photos:{a:cleanItems[0]?.photo,b:cleanItems[cleanItems.length-1]?.photo},
+    };
+    await onSubmit(payload,initialReport?.id);
     setSending(false);
   };
   return(
@@ -3174,11 +3246,8 @@ const MecForm=({campaign,sala,onSubmit,onBack,user})=>{
           )}
         </FormSection>
 
-        <FormSection title="Fotografías" desc="Antes y después del trabajo">
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <PhotoSlot label="Antes"   captured={photos.before} onCapture={url=>setPhotos({...photos,before:url})}/>
-            <PhotoSlot label="Después" captured={photos.after}  onCapture={url=>setPhotos({...photos,after:url})}/>
-          </div>
+        <FormSection title={initialReport?"Corregir tandas":"Tandas / lotes"} desc={initialReport?"Los aprobados quedan como están. Los rechazados los podés rehacer.":"Agregá una entrada por cada tanda/lote terminado con su foto."}>
+          <ReportItemsList items={items} setItems={setItems} itemNoun="tanda" namePlaceholder="Identificador (ej: Lote A — turno mañana)"/>
         </FormSection>
 
         <ToggleRow label="¿Hubo problemas?" desc="Material dañado, faltante, etc." value={form.issues} onChange={v=>setForm({...form,issues:v})} color={C.red}>
@@ -3187,7 +3256,7 @@ const MecForm=({campaign,sala,onSubmit,onBack,user})=>{
         </ToggleRow>
 
         <SubmitBtn disabled={!form.location||!form.units} loading={sending} onClick={handleSubmit} accent={C.mec}>
-          Enviar reporte
+          {initialReport?"Reenviar reporte corregido":"Enviar reporte"}
         </SubmitBtn>
       </div>
     </div>
@@ -3206,37 +3275,25 @@ const realGeo=(setGeo,setGl)=>{
 };
 
 const ImplForm=({campaign,sala,onSubmit,onBack,user,initialReport})=>{
-  const initialItems=(campaign?.materials||[]).filter(m=>m && typeof m==="string" && m.trim()).map(name=>({name,photo:null,note:""}));
-  const seedItems=initialReport?.items?.length
-    ? initialReport.items.map(it=>({...it,_status:it.status,status:it.status==="rejected"?"pending":it.status}))
-    : (initialItems.length?initialItems:[{name:"",photo:null,note:""}]);
+  const fallbackItems=(campaign?.materials||[]).filter(m=>m && typeof m==="string" && m.trim()).map(name=>({name,photo:null,note:""}));
   const [form,setForm]=useState({
     store:sala?.name||initialReport?.store||"",
     issues:initialReport?.issues||false,
     issueNote:initialReport?.issueNote||"",
     signed:initialReport?.signed||false
   });
-  const [items,setItems]=useState(seedItems);
+  const [items,setItems]=useState(()=>seedItemsFromReport(initialReport,fallbackItems.length?fallbackItems:[{name:"",photo:null,note:""}]));
   const [photoGeneral,setPhotoGeneral]=useState(initialReport?.photos_urls?.[1]||null);
   const [signedPhoto,setSignedPhoto]=useState(initialReport?.signedPhoto||null);
   const [geo,setGeo]=useState(null);const[gl,setGl]=useState(false);
   const [sending,setSending]=useState(false);
   const ts=nowStr();
   const getGeo=()=>realGeo(setGeo,setGl);
-  const editItem=(i,k,v)=>setItems(prev=>prev.map((it,j)=>j===i?{...it,[k]:v}:it));
-  const addItem=()=>setItems(prev=>[...prev,{name:"",photo:null,note:""}]);
-  const removeItem=(i)=>setItems(prev=>prev.filter((_,j)=>j!==i));
   const itemsValid=items.filter(it=>it.name.trim()&&it.photo);
   const canSubmit=itemsValid.length>0;
   const handleSubmit=async()=>{
     setSending(true);
-    const cleanItems=items.filter(it=>it.name.trim()&&it.photo).map(it=>({
-      name:it.name.trim(),photo:it.photo,note:it.note||"",
-      // Si ya estaba aprobado, mantener; si era rejected y tiene nueva foto, vuelve a pending para revisión
-      status: it._status==="approved" ? "approved" : "pending",
-      // conservar la nota del supervisor como referencia histórica si existía
-      supervisorNote: it.supervisorNote||""
-    }));
+    const cleanItems=cleanItemsForSubmit(items);
     const payload={type:"impl",campaignId:campaign.id,user:user?.name,status:"pending",date:ts,
       store:form.store,qty:cleanItems.length,
       items:cleanItems,
@@ -3282,45 +3339,7 @@ const ImplForm=({campaign,sala,onSubmit,onBack,user,initialReport})=>{
         </FormSection>
 
         <FormSection title={initialReport?"Corregir elementos":"Elementos instalados"} desc={initialReport?"Los aprobados quedan como están. Los rechazados los podés rehacer.":"Agregá un item por cada elemento POP. Cada uno con su foto."}>
-          <div style={{display:"grid",gap:12}}>
-            {items.map((it,i)=>{
-              const wasRejected=it._status==="rejected";
-              const wasApproved=it._status==="approved";
-              return (
-              <div key={i} style={{background:C.surfaceHi,border:`1px solid ${wasRejected?C.red+"55":wasApproved?C.green+"55":C.border}`,borderRadius:12,padding:"12px 14px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:10,fontWeight:700,letterSpacing:0.5,color:C.muted,textTransform:"uppercase"}}>Elemento {i+1}</span>
-                    {wasRejected && <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px",borderRadius:999,fontSize:9,fontWeight:700,background:C.red+"15",color:C.red,border:`1px solid ${C.red}33`,letterSpacing:0.3}}>RECHAZADO</span>}
-                    {wasApproved && <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px",borderRadius:999,fontSize:9,fontWeight:700,background:C.green+"15",color:C.green,border:`1px solid ${C.green}33`,letterSpacing:0.3}}>APROBADO</span>}
-                  </div>
-                  {items.length>1 && !wasApproved && (
-                    <button type="button" onClick={()=>removeItem(i)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",padding:4,display:"inline-flex"}} title="Quitar">
-                      <Icon name="x" size={14}/>
-                    </button>
-                  )}
-                </div>
-                {wasRejected && it.supervisorNote && (
-                  <div style={{background:C.red+"12",border:`1px solid ${C.red}33`,borderLeft:`3px solid ${C.red}`,borderRadius:8,padding:"8px 11px",marginBottom:8,fontSize:12,color:C.text,fontWeight:500,lineHeight:1.4}}>
-                    <span style={{color:C.red,fontWeight:700}}>Supervisor:</span> {it.supervisorNote}
-                  </div>
-                )}
-                <input value={it.name} onChange={e=>editItem(i,"name",e.target.value)} disabled={wasApproved} placeholder="Nombre del elemento (ej: Cooler exhibidor)"
-                  style={{width:"100%",background:wasApproved?C.surfaceHi:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 11px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:8,opacity:wasApproved?0.7:1}}/>
-                {wasApproved && it.photo ? (
-                  <div style={{position:"relative",borderRadius:10,overflow:"hidden",aspectRatio:"4/3"}}>
-                    <img src={it.photo} alt={it.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                  </div>
-                ) : (
-                  <PhotoSlot label={it.name||"Foto del elemento"} captured={it.photo} onCapture={url=>editItem(i,"photo",url)}/>
-                )}
-                <textarea value={it.note} onChange={e=>editItem(i,"note",e.target.value)} disabled={wasApproved} placeholder="Nota (opcional)"
-                  style={{width:"100%",minHeight:48,background:wasApproved?C.surfaceHi:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 11px",color:C.text,fontFamily:f.b,fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",marginTop:8,opacity:wasApproved?0.7:1}}/>
-              </div>
-              );
-            })}
-          </div>
-          <button type="button" onClick={addItem} style={{width:"100%",marginTop:10,background:"transparent",border:`1px dashed ${C.border}`,color:C.muted,borderRadius:10,padding:"10px",fontFamily:f.b,fontSize:13,fontWeight:600,cursor:"pointer"}}>+ Agregar otro elemento</button>
+          <ReportItemsList items={items} setItems={setItems} itemNoun="elemento" namePlaceholder="Nombre del elemento (ej: Cooler exhibidor)"/>
         </FormSection>
 
         <FormSection title="Vista general del punto" desc="Una foto opcional del PdV completo">
@@ -3357,21 +3376,33 @@ const ImplForm=({campaign,sala,onSubmit,onBack,user,initialReport})=>{
   );
 };
 
-const PromoForm=({campaign,sala,onSubmit,onBack,user})=>{
-  const [form,setForm]=useState({point:sala?.name||"",contacts:"",samples:"",obs:"",popOk:true,popNote:"",checkedIn:false});
-  const [photos,setPhotos]=useState({activation:null,general:null,pop:null});
+const PromoForm=({campaign,sala,onSubmit,onBack,user,initialReport})=>{
+  const [form,setForm]=useState({
+    point:sala?.name||initialReport?.point||"",
+    contacts:initialReport?.contacts||"",
+    samples:initialReport?.samples||"",
+    obs:initialReport?.obs||"",
+    popOk:initialReport?.popOk??true,
+    popNote:initialReport?.popNote||"",
+    checkedIn:initialReport?.checkedIn||false
+  });
+  const [items,setItems]=useState(()=>seedItemsFromReport(initialReport,[{name:"",photo:null,note:""}]));
+  const [photoGeneral,setPhotoGeneral]=useState(initialReport?.photos_urls?.[1]||null);
   const [geo,setGeo]=useState(null);const[gl,setGl]=useState(false);
-  const [entryTime]=useState(nowStr());const[exitTime,setExitTime]=useState(null);
+  const [entryTime]=useState(initialReport?.entryTime||nowStr());const[exitTime,setExitTime]=useState(initialReport?.exitTime||null);
   const [sending,setSending]=useState(false);
   const getGeo=()=>realGeo(setGeo,setGl);
   const ts=nowStr();
   const handleSubmit=async()=>{
     setSending(true);
-    await onSubmit({type:"promo",campaignId:campaign.id,user:user?.name,status:"pending",date:ts,
+    const cleanItems=cleanItemsForSubmit(items);
+    const payload={type:"promo",campaignId:campaign.id,user:user?.name,status:"pending",date:ts,
       point:form.point,contacts:parseInt(form.contacts)||0,samples:parseInt(form.samples)||0,
       popOk:form.popOk,popNote:form.popNote,obs:form.obs,checkedIn:form.checkedIn,
-      entryTime,exitTime,photos:{a:photos.activation,b:photos.general,c:photos.pop},geo,
-    });
+      items:cleanItems,
+      entryTime,exitTime,photos:{a:cleanItems[0]?.photo,b:photoGeneral},geo,
+    };
+    await onSubmit(payload,initialReport?.id);
     setSending(false);
   };
 
@@ -3427,12 +3458,12 @@ const PromoForm=({campaign,sala,onSubmit,onBack,user})=>{
           )}
         </FormSection>
 
-        <FormSection title="Fotografías" desc="Activación, vista general y material POP">
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-            <PhotoSlot label="Activación" captured={photos.activation} onCapture={url=>setPhotos({...photos,activation:url})}/>
-            <PhotoSlot label="General"    captured={photos.general}    onCapture={url=>setPhotos({...photos,general:url})}/>
-            <PhotoSlot label="POP"        captured={photos.pop}        onCapture={url=>setPhotos({...photos,pop:url})}/>
-          </div>
+        <FormSection title={initialReport?"Corregir elementos / material":"Elementos / material POP"} desc={initialReport?"Los aprobados quedan como están. Los rechazados los podés rehacer.":"Agregá un item por cada material POP o muestra. Cada uno con su foto."}>
+          <ReportItemsList items={items} setItems={setItems} itemNoun="elemento" namePlaceholder="ej: Banner, Mesa de sampling, Caja de muestras"/>
+        </FormSection>
+
+        <FormSection title="Foto general del punto" desc="Una foto del lugar de activación (opcional)">
+          <PhotoSlot label="Vista del lugar" captured={photoGeneral} onCapture={url=>setPhotoGeneral(url)}/>
         </FormSection>
 
         <FormSection title="Métricas">
@@ -3463,7 +3494,7 @@ const PromoForm=({campaign,sala,onSubmit,onBack,user})=>{
         </FormSection>
 
         <SubmitBtn disabled={!form.point||!form.checkedIn} loading={sending} onClick={handleSubmit} accent={C.promo}>
-          Enviar reporte
+          {initialReport?"Reenviar reporte corregido":"Enviar reporte"}
         </SubmitBtn>
       </div>
     </div>
@@ -3759,8 +3790,8 @@ export default function App(){
   if(screen==="form"){
     const back=()=>setScreen(sala?"sala-select":"select");
     if(vertical==="impl") return <ImplForm  campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport} initialReport={editingReport}/>;
-    if(vertical==="promo")return <PromoForm campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport}/>;
-    if(vertical==="mec")  return <MecForm   campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport}/>;
+    if(vertical==="promo")return <PromoForm campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport} initialReport={editingReport}/>;
+    if(vertical==="mec")  return <MecForm   campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport} initialReport={editingReport}/>;
   }
   if(screen==="sala-select") return <SalaSelect type={vertical} campaign={campaign} user={user} reports={myReports} onSelect={(s,prevReport)=>{setSala(s);setEditingReport(prevReport||null);setScreen("form");}} onBack={()=>{setSala(null);setEditingReport(null);setScreen("select");}}/>;
   if(screen==="select")return <CampaignSelect type={vertical} campaigns={myCamps} reports={myReports} userName={user.name} onSelect={c=>{
