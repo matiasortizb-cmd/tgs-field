@@ -794,6 +794,14 @@ const CampaignMapView=({workers,salas})=>{
   );
 };
 
+// Renderiza el contenido del círculo de avatar: <img> si photo es URL, sino iniciales o "?"
+const avatarContent=(photo,name)=>{
+  if(typeof photo==="string" && /^https?:\/\//.test(photo)){
+    return <img src={photo} alt={name||"avatar"} style={{width:"100%",height:"100%",objectFit:"cover"}}/>;
+  }
+  return photo || (name||"").split(" ").map(n=>n[0]).filter(Boolean).slice(0,2).join("").toUpperCase() || "?";
+};
+
 // Formatea un RUT chileno mientras se escribe: 12.345.678-9 (acepta dígitos y K)
 const formatRut=(raw)=>{
   const clean=(raw||"").replace(/[^0-9kK]/g,"").toUpperCase();
@@ -812,7 +820,7 @@ const FormPersonRow=({person,active,onClick,activeColor})=>{
   return (
     <div onClick={onClick}
       style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,background:active?activeColor+"10":"transparent",border:`1px solid ${active?activeColor:C.border}`,marginBottom:6,cursor:"pointer",transition:"all .15s"}}>
-      <div style={{width:32,height:32,borderRadius:"50%",background:rc,color:pickTextOn(rc),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{person.photo||(person.name||"").split(" ").map(n=>n[0]).filter(Boolean).slice(0,2).join("").toUpperCase()||"?"}</div>
+      <div style={{width:32,height:32,borderRadius:"50%",background:rc,color:pickTextOn(rc),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0,overflow:"hidden"}}>{avatarContent(person.photo,person.name)}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontWeight:600,fontSize:13,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{person.name}</div>
         {(person.comuna||person.region) && (
@@ -1575,7 +1583,7 @@ const WorkersTab=({workers,setWorkers,allCampaigns})=>{
                 style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderTop:i===0?"none":`1px solid ${C.border}`,cursor:"pointer",transition:"background .15s"}}
                 onMouseEnter={e=>e.currentTarget.style.background=C.bg}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <div style={{width:32,height:32,borderRadius:"50%",background:rc,color:pickTextOn(rc),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{w.photo||"?"}</div>
+                <div style={{width:32,height:32,borderRadius:"50%",background:rc,color:pickTextOn(rc),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0,overflow:"hidden"}}>{avatarContent(w.photo,w.name)}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:600,fontSize:13,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{w.name}</div>
                   <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:C.muted,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginTop:2}}>
@@ -1623,7 +1631,7 @@ const WorkersTab=({workers,setWorkers,allCampaigns})=>{
 
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"28px 24px",marginBottom:14,textAlign:"center"}}>
           <div style={{position:"relative",display:"inline-block",marginBottom:14}}>
-            <div style={{width:80,height:80,borderRadius:"50%",background:primaryRoleColor,color:pickTextOn(primaryRoleColor),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:24,letterSpacing:-1}}>{selected.photo||"?"}</div>
+            <div style={{width:80,height:80,borderRadius:"50%",background:primaryRoleColor,color:pickTextOn(primaryRoleColor),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:24,letterSpacing:-1,overflow:"hidden"}}>{avatarContent(selected.photo,selected.name)}</div>
             <span style={{position:"absolute",bottom:2,right:2,width:18,height:18,borderRadius:"50%",background:sCol,border:`3px solid ${C.surface}`}}/>
           </div>
           <h2 style={{margin:0,fontSize:22,fontWeight:800,color:C.text,letterSpacing:-0.4}}>{selected.name}</h2>
@@ -1776,7 +1784,7 @@ const WorkersTab=({workers,setWorkers,allCampaigns})=>{
                 onMouseEnter={e=>e.currentTarget.style.background=C.surfaceAlt||C.bg}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <div style={{position:"relative",flexShrink:0}}>
-                  <div style={{width:40,height:40,borderRadius:"50%",background:roleColor,color:pickTextOn(roleColor),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13}}>{w.photo||"?"}</div>
+                  <div style={{width:40,height:40,borderRadius:"50%",background:roleColor,color:pickTextOn(roleColor),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,overflow:"hidden"}}>{avatarContent(w.photo,w.name)}</div>
                   <span style={{position:"absolute",bottom:-1,right:-1,width:11,height:11,borderRadius:"50%",background:sColor(w.status),border:`2px solid ${C.surface}`}}/>
                 </div>
                 <div style={{flex:1,minWidth:0}}>
@@ -2591,7 +2599,7 @@ const LandingScreen=({user,allCampaigns,onSelect,onLogout})=>{
         style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px 18px",marginBottom:20,cursor:"pointer"}}>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <div style={{position:"relative",flexShrink:0}}>
-            <div style={{width:48,height:48,borderRadius:"50%",background:roleColor,color:pickTextOn(roleColor),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15}}>{user.photo||initials||"?"}</div>
+            <div style={{width:48,height:48,borderRadius:"50%",background:roleColor,color:pickTextOn(roleColor),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,overflow:"hidden"}}>{avatarContent(user.photo,user.name)||initials||"?"}</div>
             <span style={{position:"absolute",bottom:-1,right:-1,width:13,height:13,borderRadius:"50%",background:C.green,border:`2px solid ${C.surface}`}}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
