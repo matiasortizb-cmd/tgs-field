@@ -1224,11 +1224,16 @@ const WorkerRegisterScreen=({onSuccess,onBack})=>{
   const handleSubmit=async()=>{
     setSubmitting(true);setSubmitErr("");
     try{
-      const {error:authErr}=await signUp(form.email.trim().toLowerCase(),form.password);
-      if(authErr) throw authErr;
-      const initials=form.name.split(" ").map(n=>n[0]).join("").toUpperCase().slice(0,2);
+      const email=form.email.trim().toLowerCase();
+      const {error:authErr}=await signUp(email,form.password);
+      if(authErr && !/already\s*registered|user\s*already/i.test(authErr.message||"")) throw authErr;
+      // Si el usuario auth ya existe, igual aseguramos que haya un worker (recupera intentos previos fallidos)
+      const {data:existingWorker}=await getWorkerByEmail(email);
+      if(existingWorker){
+        throw new Error("Ya existe un perfil con este email. Si es tuyo, intentá iniciar sesión.");
+      }
       const {error:wErr}=await insertWorker({
-        name:form.name,rut:form.rut,phone:form.phone,email:form.email.trim().toLowerCase(),
+        name:form.name,rut:form.rut,phone:form.phone,email,
         region:form.region,comuna:form.comuna,address:form.address,address_detail:form.addressDetail||null,
         roles:form.roles,bank:form.bank,account_type:form.accountType,account_number:form.account,
         photo_url:form.photo||null,
