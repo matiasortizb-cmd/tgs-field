@@ -355,12 +355,17 @@ const INIT_MEC = [
 ];
 
 // ─── APPROVAL MODAL ───────────────────────────────────────────────────────────
-const ApprovalModal=({report,onClose,onApprove,onReject,onReview,onUpdateItems})=>{
+const ApprovalModal=({report,worker,campaign,onClose,onApprove,onReject,onReview,onUpdateItems})=>{
   const [comment,setComment]=useState(report.supervisorComment||"");
   const [items,setItems]=useState(report.items||[]);
   const vt = VERTICALS[report.type];
   const setItemStatus=(i,status)=>{
     const next=items.map((it,j)=>j===i?{...it,status}:it);
+    setItems(next);
+    onUpdateItems&&onUpdateItems(report.id,next);
+  };
+  const setItemNote=(i,supervisorNote)=>{
+    const next=items.map((it,j)=>j===i?{...it,supervisorNote}:it);
     setItems(next);
     onUpdateItems&&onUpdateItems(report.id,next);
   };
@@ -370,6 +375,20 @@ const ApprovalModal=({report,onClose,onApprove,onReject,onReview,onUpdateItems})
     setItems(next);
     onUpdateItems&&onUpdateItems(report.id,next);
   };
+  const rejectedItems=items.filter(it=>it.status==="rejected");
+  const hasRejection=rejectedItems.length>0||report.status==="rejected"||report.status==="review";
+  const buildWaMsg=()=>{
+    const lugar=report.store||report.point||report.location||"el punto";
+    const campName=campaign?.name||"";
+    let msg=`Hola ${(worker?.name||"").split(" ")[0]||""}, soy de TGS Field.\n\nTu reporte en *${lugar}*${campName?` (${campName})`:""} tiene observaciones para corregir:\n`;
+    if(rejectedItems.length){
+      msg+="\n"+rejectedItems.map(it=>`❌ ${it.name}${it.supervisorNote?`\n   ↪ ${it.supervisorNote}`:""}`).join("\n");
+    }
+    if(comment){ msg+=`\n\n📝 ${comment}`; }
+    msg+="\n\nPor favor revisalo desde la app y volvelo a enviar. Gracias.";
+    return msg;
+  };
+  const waHref=worker?.phone?`${waLink(worker.phone)}?text=${encodeURIComponent(buildWaMsg())}`:null;
   const extraPhotos=(report.photos_urls||[]).filter(u=>!items.some(it=>it.photo===u));
   return(
     <div style={{position:"fixed",inset:0,background:"#000a",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
@@ -431,6 +450,10 @@ const ApprovalModal=({report,onClose,onApprove,onReject,onReview,onUpdateItems})
                       <button onClick={()=>setItemStatus(i,"rejected")} disabled={st==="rejected"}
                         style={{flex:1,background:st==="rejected"?C.red+"18":"transparent",border:`1px solid ${st==="rejected"?C.red:C.border}`,color:st==="rejected"?C.red:C.text,borderRadius:8,padding:"6px",fontSize:11,fontWeight:600,cursor:st==="rejected"?"default":"pointer",fontFamily:f.b}}>✗ Rechazar</button>
                     </div>
+                    {st==="rejected" && (
+                      <textarea value={it.supervisorNote||""} onChange={e=>setItemNote(i,e.target.value)} placeholder="¿Qué tiene que corregir? (visible para el worker)"
+                        style={{width:"100%",minHeight:54,marginTop:8,background:C.surface,border:`1px solid ${C.red}55`,borderRadius:8,padding:"8px 11px",color:C.text,fontFamily:f.b,fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
+                    )}
                   </div>
                 );
               })}
@@ -465,6 +488,18 @@ const ApprovalModal=({report,onClose,onApprove,onReject,onReview,onUpdateItems})
         <div style={{marginTop:10}}>
           <Btn variant="ghost" full small onClick={()=>onReview(report.id,comment)}>Solicitar corrección</Btn>
         </div>
+        {hasRejection && (
+          waHref ? (
+            <a href={waHref} target="_blank" rel="noopener noreferrer"
+              style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:12,padding:"12px 16px",background:"#25D366",color:"#fff",borderRadius:10,textDecoration:"none",fontFamily:f.b,fontWeight:700,fontSize:13,letterSpacing:-0.1}}>
+              <Icon name="message" size={16}/> Avisar al worker por WhatsApp
+            </a>
+          ) : (
+            <div style={{marginTop:12,padding:"10px 14px",background:C.orange+"15",border:`1px solid ${C.orange}33`,borderRadius:10,fontSize:12,color:C.orange,fontWeight:600,textAlign:"center"}}>
+              Sin teléfono del worker — no se puede enviar WhatsApp
+            </div>
+          )
+        )}
       </div>
     </div>
   );
@@ -734,7 +769,7 @@ const PaymentsTab=({allCampaigns,reports,workers})=>{
 };
 
 // ─── APPROVAL TAB ─────────────────────────────────────────────────────────────
-const ApprovalTab=({reports,setReports,allCampaigns,vertical,user,filterStatus:fsExternal,setFilterStatus:setFsExternal})=>{
+const ApprovalTab=({reports,setReports,allCampaigns,workers,vertical,user,filterStatus:fsExternal,setFilterStatus:setFsExternal})=>{
   const [modal,setModal]=useState(null);
   const [fsInternal,setFsInternal]=useState("pending");
   const filterStatus=fsExternal!==undefined?fsExternal:fsInternal;
@@ -761,7 +796,10 @@ const ApprovalTab=({reports,setReports,allCampaigns,vertical,user,filterStatus:f
 
   return(
     <div style={{paddingBottom:80}}>
-      {modal&&<ApprovalModal report={modal} onClose={()=>setModal(null)} onApprove={approve} onReject={reject} onReview={review} onUpdateItems={updateItems}/>}
+      {modal&&<ApprovalModal report={modal}
+        worker={(workers||[]).find(w=>w.name===modal.user)}
+        campaign={(allCampaigns||[]).find(c=>c.id===modal.campaignId)}
+        onClose={()=>setModal(null)} onApprove={approve} onReject={reject} onReview={review} onUpdateItems={updateItems}/>}
 
       <div style={{marginBottom:24}}>
         <h1 style={{margin:0,fontSize:24,fontWeight:800,color:C.text,letterSpacing:-0.4}}>Aprobaciones</h1>
@@ -2663,7 +2701,7 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
         })()}
 
         {/* APROBACIONES */}
-        {tab==="approvals"&&<ApprovalTab reports={reports} setReports={setReports} allCampaigns={allCampaigns} vertical={vertical} user={user} filterStatus={approvalStatus} setFilterStatus={setApprovalStatus}/>}
+        {tab==="approvals"&&<ApprovalTab reports={reports} setReports={setReports} allCampaigns={allCampaigns} workers={workers} vertical={vertical} user={user} filterStatus={approvalStatus} setFilterStatus={setApprovalStatus}/>}
 
         {/* REPORTES CLIENTE */}
         {tab==="reports"&&<>
@@ -2743,7 +2781,8 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
 };
 
 // ─── FIELD USER ───────────────────────────────────────────────────────────────
-const LandingScreen=({user,allCampaigns,onSelect,onLogout,onChangeRole})=>{
+const LandingScreen=({user,allCampaigns,myReports,onSelect,onLogout,onChangeRole})=>{
+  const rejectedReports=(myReports||[]).filter(r=>r.status==="rejected"||r.status==="review"||(r.items||[]).some(it=>it.status==="rejected"));
   const [boletas,setBoletas]=useState({});
   const [showProfile,setShowProfile]=useState(false);
   const myApproved=INIT_REPORTS.filter(r=>r.user===user.name&&r.status==="approved");
@@ -2759,6 +2798,17 @@ const LandingScreen=({user,allCampaigns,onSelect,onLogout,onChangeRole})=>{
     <TopBar title="TGS Field" sub={`Hola, ${user.name?.split(" ")[0]||""}`} onLogout={onLogout}/>
     <RoleSwitchBanner user={user} onChangeRole={onChangeRole}/>
     <div style={{padding:"24px 20px 40px",maxWidth:560,width:"100%",margin:"0 auto",boxSizing:"border-box"}}>
+      {rejectedReports.length>0 && (
+        <div style={{background:C.red+"12",border:`1px solid ${C.red}55`,borderLeft:`4px solid ${C.red}`,borderRadius:10,padding:"12px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:32,height:32,borderRadius:8,background:C.red+"22",color:C.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Icon name="x" size={16}/>
+          </div>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.red,letterSpacing:-0.1}}>Tenés {rejectedReports.length} reporte{rejectedReports.length!==1?"s":""} con observaciones</div>
+            <div style={{fontSize:11,color:C.text,marginTop:2,fontWeight:500}}>Entrá a la campaña correspondiente, corregí lo señalado y volvé a enviar.</div>
+          </div>
+        </div>
+      )}
 
       <div onClick={()=>setShowProfile(s=>!s)}
         style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px 18px",marginBottom:20,cursor:"pointer"}}>
@@ -2887,9 +2937,10 @@ const LandingScreen=({user,allCampaigns,onSelect,onLogout,onChangeRole})=>{
   </div>
 );};
 
-const CampaignSelect=({type,campaigns,onSelect,onBack})=>{
+const CampaignSelect=({type,campaigns,reports,userName,onSelect,onBack})=>{
   const vt=VERTICALS[type];
   const active=campaigns.filter(c=>c.status==="activa");
+  const rejectedByCamp=(cid)=>(reports||[]).filter(r=>r.campaignId===cid&&r.user===userName&&(r.status==="rejected"||r.status==="review"||(r.items||[]).some(it=>it.status==="rejected"))).length;
   return(
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:f.b,color:C.text}}>
       <TopBar title={vt.label} sub="Elegí tu campaña" onBack={onBack}/>
@@ -2905,17 +2956,24 @@ const CampaignSelect=({type,campaigns,onSelect,onBack})=>{
             {active.map(c=>{
               const total=c.stores||c.points||c.totalUnits||1; const p=pct(c.done,total);
               const done=p===100;
+              const rejectedN=rejectedByCamp(c.id);
               return(
                 <div key={c.id} onClick={()=>onSelect(c)}
-                  style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",cursor:"pointer",position:"relative",transition:"border-color .15s, box-shadow .15s"}}
+                  style={{background:C.surface,border:`1px solid ${rejectedN>0?C.red+"55":C.border}`,borderRadius:12,padding:"16px 18px",cursor:"pointer",position:"relative",transition:"border-color .15s, box-shadow .15s"}}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=vt.color;e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.06)";}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.boxShadow="none";}}>
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=rejectedN>0?C.red+"55":C.border;e.currentTarget.style.boxShadow="none";}}>
                   <div style={{position:"absolute",top:0,bottom:0,left:0,width:3,background:vt.color,borderTopLeftRadius:12,borderBottomLeftRadius:12}}/>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:10}}>
                     <div style={{minWidth:0,flex:1}}>
                       <div style={{fontSize:10,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:4}}>{c.client}</div>
                       <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-0.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</div>
-                      {c.payMode && <div style={{fontSize:11,color:C.muted,marginTop:3,fontWeight:500}}>{c.payMode}</div>}
+                      {rejectedN>0 && (
+                        <div style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:6,padding:"3px 9px",borderRadius:999,fontSize:11,fontWeight:700,background:C.red+"15",color:C.red,border:`1px solid ${C.red}33`}}>
+                          <span style={{width:5,height:5,borderRadius:"50%",background:C.red}}/>
+                          {rejectedN} con observaciones
+                        </div>
+                      )}
+                      {c.payMode && !rejectedN && <div style={{fontSize:11,color:C.muted,marginTop:3,fontWeight:500}}>{c.payMode}</div>}
                     </div>
                     <div style={{textAlign:"right",flexShrink:0}}>
                       <div style={{fontSize:14,fontWeight:700,color:done?C.green:C.text}}>{p}%</div>
@@ -2936,9 +2994,10 @@ const CampaignSelect=({type,campaigns,onSelect,onBack})=>{
 };
 
 // Lista las salas asignadas al worker dentro de una campaña
-const SalaSelect=({type,campaign,user,onSelect,onBack})=>{
+const SalaSelect=({type,campaign,user,reports,onSelect,onBack})=>{
   const vt=VERTICALS[type];
   const mySalas=(campaign.salas||[]).filter(s=>(s.assignedTo||[]).includes(user.name));
+  const isSalaRejected=(sName)=>(reports||[]).some(r=>r.campaignId===campaign.id&&r.user===user.name&&(r.store===sName||r.point===sName||r.location===sName)&&(r.status==="rejected"||r.status==="review"||(r.items||[]).some(it=>it.status==="rejected")));
   return(
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:f.b,color:C.text}}>
       <TopBar title={campaign.name} sub={campaign.client} onBack={onBack}/>
@@ -2954,22 +3013,31 @@ const SalaSelect=({type,campaign,user,onSelect,onBack})=>{
           </div>
         ) : (
           <div style={{display:"grid",gap:8}}>
-            {mySalas.map((s,i)=>(
+            {mySalas.map((s,i)=>{
+              const rej=isSalaRejected(s.name);
+              return (
               <div key={i} onClick={()=>onSelect(s)}
-                style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",cursor:"pointer",position:"relative",transition:"border-color .15s, box-shadow .15s"}}
+                style={{background:C.surface,border:`1px solid ${rej?C.red+"55":C.border}`,borderRadius:12,padding:"14px 16px",cursor:"pointer",position:"relative",transition:"border-color .15s, box-shadow .15s"}}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=vt.color;e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.06)";}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.boxShadow="none";}}>
-                <div style={{position:"absolute",top:0,bottom:0,left:0,width:3,background:vt.color,borderTopLeftRadius:12,borderBottomLeftRadius:12}}/>
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=rej?C.red+"55":C.border;e.currentTarget.style.boxShadow="none";}}>
+                <div style={{position:"absolute",top:0,bottom:0,left:0,width:3,background:rej?C.red:vt.color,borderTopLeftRadius:12,borderBottomLeftRadius:12}}/>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                   <div style={{minWidth:0,flex:1}}>
                     {s.chain && <div style={{fontSize:10,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:3}}>{s.chain}</div>}
                     <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-0.2}}>{s.name||"Sin nombre"}</div>
                     {s.address && <div style={{fontSize:11,color:C.muted,marginTop:3,fontWeight:500,display:"inline-flex",alignItems:"center",gap:4}}><Icon name="pin" size={11}/>{s.address}</div>}
+                    {rej && (
+                      <div style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:6,padding:"2px 8px",borderRadius:999,fontSize:10,fontWeight:700,background:C.red+"15",color:C.red,border:`1px solid ${C.red}33`}}>
+                        <span style={{width:5,height:5,borderRadius:"50%",background:C.red}}/>
+                        Con observaciones
+                      </div>
+                    )}
                   </div>
-                  <span style={{color:vt.color,fontWeight:700,fontSize:13,whiteSpace:"nowrap",flexShrink:0}}>Reportar →</span>
+                  <span style={{color:rej?C.red:vt.color,fontWeight:700,fontSize:13,whiteSpace:"nowrap",flexShrink:0}}>{rej?"Corregir →":"Reportar →"}</span>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -3532,6 +3600,7 @@ export default function App(){
   const [implCamps,setImpl]  =useState([]);
   const [promoCamps,setPromo]=useState([]);
   const [mecCamps,setMec]    =useState([]);
+  const [myReports,setMyReports]=useState([]);
   const [loading,setLoading] =useState(true);
 
   // Restore session on mount
@@ -3559,13 +3628,21 @@ export default function App(){
       const [i,p,m] = await Promise.all([
         getCampaigns('impl'), getCampaigns('promo'), getCampaigns('mec')
       ]);
-      if(i.data) setImpl(i.data);
-      if(p.data) setPromo(p.data);
-      if(m.data) setMec(m.data);
+      if(i.data) setImpl(i.data.map(fromDbCampaign));
+      if(p.data) setPromo(p.data.map(fromDbCampaign));
+      if(m.data) setMec(m.data.map(fromDbCampaign));
     } catch(e){ console.error(e); }
   },[]);
 
-  useEffect(()=>{ if(user) loadCampaigns(); },[user,loadCampaigns]);
+  const loadMyReports = useCallback(async (workerName) => {
+    if(!workerName) return;
+    try{
+      const {data} = await getReports();
+      if(data) setMyReports(data.map(fromDbReport).filter(r=>r.user===workerName));
+    }catch(e){ console.error(e); }
+  },[]);
+
+  useEffect(()=>{ if(user){ loadCampaigns(); loadMyReports(user.name); } },[user,loadCampaigns,loadMyReports]);
 
   const handleLogout=async()=>{
     await signOut();
@@ -3602,11 +3679,11 @@ export default function App(){
     if(vertical==="promo")return <PromoForm campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport}/>;
     if(vertical==="mec")  return <MecForm   campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport}/>;
   }
-  if(screen==="sala-select") return <SalaSelect type={vertical} campaign={campaign} user={user} onSelect={s=>{setSala(s);setScreen("form");}} onBack={()=>{setSala(null);setScreen("select");}}/>;
-  if(screen==="select")return <CampaignSelect type={vertical} campaigns={myCamps} onSelect={c=>{
+  if(screen==="sala-select") return <SalaSelect type={vertical} campaign={campaign} user={user} reports={myReports} onSelect={s=>{setSala(s);setScreen("form");}} onBack={()=>{setSala(null);setScreen("select");}}/>;
+  if(screen==="select")return <CampaignSelect type={vertical} campaigns={myCamps} reports={myReports} userName={user.name} onSelect={c=>{
     setCamp(c);setSala(null);
     const hasAssignedSalas=(c.salas||[]).some(s=>(s.assignedTo||[]).includes(user.name));
     setScreen(hasAssignedSalas?"sala-select":"form");
   }} onBack={reset}/>;
-  return <LandingScreen user={user} allCampaigns={allCampaigns} onSelect={v=>{setVert(v);setScreen("select");}} onLogout={handleLogout} onChangeRole={changeRole}/>;
+  return <LandingScreen user={user} allCampaigns={allCampaigns} myReports={myReports} onSelect={v=>{setVert(v);setScreen("select");}} onLogout={handleLogout} onChangeRole={changeRole}/>;
 }
