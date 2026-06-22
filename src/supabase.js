@@ -162,8 +162,9 @@ export const updateBoletaStatus = (id, status) => supabase.from('boletas').updat
 
 // STORAGE
 export const uploadPhoto = async (file, reportId) => {
-  const ext = file.name.split('.').pop();
-  const path = `reports/${reportId}/${Date.now()}.${ext}`;
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const safeId = String(reportId || 'r').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9_-]/g, '-');
+  const path = `reports/${safeId}/${Date.now()}.${ext || 'jpg'}`;
   const { error } = await supabase.storage.from('photos').upload(path, file);
   if (error) throw error;
   return supabase.storage.from('photos').getPublicUrl(path).data.publicUrl;
