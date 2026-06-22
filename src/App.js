@@ -1204,7 +1204,9 @@ const WorkerRegisterScreen=({onSuccess,onBack})=>{
   const [submitErr,setSubmitErr]=useState("");
   const [photoUploading,setPhotoUploading]=useState(false);
   const [photoErr,setPhotoErr]=useState("");
-  const photoInputRef=useRef(null);
+  const [photoMenuOpen,setPhotoMenuOpen]=useState(false);
+  const cameraInputRef=useRef(null);
+  const galleryInputRef=useRef(null);
 
   const handlePhotoFile=async(e)=>{
     const file=e.target.files?.[0];
@@ -1318,7 +1320,8 @@ const WorkerRegisterScreen=({onSuccess,onBack})=>{
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"20px 22px",marginBottom:18}}>
             <div style={{fontSize:14,fontWeight:700,color:C.text,letterSpacing:-0.2,marginBottom:4}}>Foto de perfil</div>
             <div style={{fontSize:12,color:C.muted,marginBottom:14,fontWeight:500}}>Opcional, ayuda a que te reconozcan en el panel</div>
-            <input ref={photoInputRef} type="file" accept="image/*" capture="user" style={{display:"none"}} onChange={handlePhotoFile}/>
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="user" style={{display:"none"}} onChange={handlePhotoFile}/>
+            <input ref={galleryInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handlePhotoFile}/>
             <div style={{display:"flex",alignItems:"center",gap:14}}>
               <div style={{width:64,height:64,borderRadius:"50%",background:form.photo?"transparent":C.surfaceHi,border:`1.5px dashed ${form.photo?C.green:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:form.photo?C.green:C.muted,overflow:"hidden",flexShrink:0}}>
                 {photoUploading
@@ -1328,13 +1331,48 @@ const WorkerRegisterScreen=({onSuccess,onBack})=>{
                     :<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>
                 }
               </div>
-              <button onClick={()=>photoInputRef.current?.click()} disabled={photoUploading}
+              <button onClick={()=>setPhotoMenuOpen(true)} disabled={photoUploading}
                 style={{background:"transparent",border:`1px solid ${C.border}`,color:C.text,borderRadius:10,padding:"9px 14px",fontFamily:f.b,fontSize:13,fontWeight:600,cursor:photoUploading?"default":"pointer",opacity:photoUploading?0.6:1}}>
                 {photoUploading?"Subiendo…":form.photo?"Cambiar foto":"Subir foto"}
               </button>
             </div>
             {photoErr && <div style={{marginTop:10,padding:"8px 12px",background:C.red+"15",border:`1px solid ${C.red}33`,borderRadius:8,color:C.red,fontSize:12,fontWeight:500}}>{photoErr}</div>}
           </div>
+
+          {photoMenuOpen && (
+            <div onClick={()=>setPhotoMenuOpen(false)}
+              style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:0}}>
+              <div onClick={e=>e.stopPropagation()}
+                style={{background:C.surface,borderRadius:"16px 16px 0 0",padding:"22px 22px max(28px, env(safe-area-inset-bottom))",width:"100%",maxWidth:480,boxShadow:"0 -10px 30px rgba(0,0,0,0.2)"}}>
+                <div style={{width:36,height:4,background:C.border,borderRadius:2,margin:"0 auto 18px"}}/>
+                <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:14,letterSpacing:-0.2}}>Foto de perfil</div>
+                <button onClick={()=>{setPhotoMenuOpen(false);cameraInputRef.current?.click();}}
+                  style={{width:"100%",background:"transparent",border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"center",gap:12,fontFamily:f.b,textAlign:"left"}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:C.impl+"15",border:`1px solid ${C.impl}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:C.impl}}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,color:C.text}}>Tomar foto</div>
+                    <div style={{fontSize:12,color:C.muted,fontWeight:500,marginTop:2}}>Abrir la cámara ahora</div>
+                  </div>
+                </button>
+                <button onClick={()=>{setPhotoMenuOpen(false);galleryInputRef.current?.click();}}
+                  style={{width:"100%",background:"transparent",border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"center",gap:12,fontFamily:f.b,textAlign:"left"}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:C.blue+"15",border:`1px solid ${C.blue}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:C.blue}}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,color:C.text}}>Elegir desde galería</div>
+                    <div style={{fontSize:12,color:C.muted,fontWeight:500,marginTop:2}}>Buscar una foto guardada</div>
+                  </div>
+                </button>
+                <button onClick={()=>setPhotoMenuOpen(false)}
+                  style={{width:"100%",background:"transparent",border:"none",color:C.muted,padding:"12px",cursor:"pointer",fontFamily:f.b,fontSize:13,fontWeight:600,marginTop:4}}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
 
           <button disabled={!form.name||!form.rut||!form.phone||!form.email||!form.password||form.password.length<6||form.password!==form.confirmPass||!form.region}
             onClick={()=>setStep(2)}
