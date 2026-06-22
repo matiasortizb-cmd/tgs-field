@@ -214,11 +214,14 @@ const SL=({children,mt})=>(
   <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:C.muted,textTransform:"uppercase",marginBottom:10,marginTop:mt||4}}>{children}</div>
 );
 const PhotoSlot=({label,captured,onCapture})=>{
-  const ref=useRef(null);
+  const cameraRef=useRef(null);
+  const galleryRef=useRef(null);
   const [preview,setPreview]=useState(null);
   const [uploading,setUploading]=useState(false);
+  const [menuOpen,setMenuOpen]=useState(false);
   const handleFile=async(e)=>{
     const file=e.target.files[0];
+    e.target.value="";
     if(!file) return;
     setPreview(URL.createObjectURL(file));
     setUploading(true);
@@ -233,13 +236,50 @@ const PhotoSlot=({label,captured,onCapture})=>{
     : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>;
   const stateColor=captured?C.green:C.muted;
   return(
-    <div onClick={()=>ref.current.click()}
-      style={{background:captured?C.green+"08":C.surfaceHi,border:`1.5px dashed ${captured?C.green:C.border}`,borderRadius:12,aspectRatio:"4/3",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:6,overflow:"hidden",position:"relative",color:stateColor,transition:"border-color .15s, background .15s"}}>
-      <input ref={ref} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleFile}/>
-      {preview && <img src={preview} alt={label} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}}/>}
-      {!preview && icon}
-      <span style={{fontSize:11,fontWeight:600,color:captured?C.green:C.muted,textAlign:"center",padding:"0 6px",position:"relative",zIndex:1,letterSpacing:0.2}}>{uploading?"Subiendo…":label}</span>
-    </div>
+    <>
+      <div onClick={()=>!uploading&&setMenuOpen(true)}
+        style={{background:captured?C.green+"08":C.surfaceHi,border:`1.5px dashed ${captured?C.green:C.border}`,borderRadius:12,aspectRatio:"4/3",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:uploading?"default":"pointer",gap:6,overflow:"hidden",position:"relative",color:stateColor,transition:"border-color .15s, background .15s"}}>
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleFile}/>
+        <input ref={galleryRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleFile}/>
+        {preview && <img src={preview} alt={label} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}}/>}
+        {!preview && icon}
+        <span style={{fontSize:11,fontWeight:600,color:captured?C.green:C.muted,textAlign:"center",padding:"0 6px",position:"relative",zIndex:1,letterSpacing:0.2}}>{uploading?"Subiendo…":label}</span>
+      </div>
+      {menuOpen && (
+        <div onClick={()=>setMenuOpen(false)}
+          style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:C.surface,borderRadius:"16px 16px 0 0",padding:"22px 22px max(28px, env(safe-area-inset-bottom))",width:"100%",maxWidth:480,boxShadow:"0 -10px 30px rgba(0,0,0,0.2)"}}>
+            <div style={{width:36,height:4,background:C.border,borderRadius:2,margin:"0 auto 18px"}}/>
+            <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:14,letterSpacing:-0.2}}>{label||"Foto"}</div>
+            <button onClick={()=>{setMenuOpen(false);cameraRef.current?.click();}}
+              style={{width:"100%",background:"transparent",border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"center",gap:12,fontFamily:f.b,textAlign:"left"}}>
+              <div style={{width:36,height:36,borderRadius:10,background:C.impl+"15",border:`1px solid ${C.impl}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:C.impl}}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:700,color:C.text}}>Tomar foto</div>
+                <div style={{fontSize:12,color:C.muted,fontWeight:500,marginTop:2}}>Abrir la cámara ahora</div>
+              </div>
+            </button>
+            <button onClick={()=>{setMenuOpen(false);galleryRef.current?.click();}}
+              style={{width:"100%",background:"transparent",border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"center",gap:12,fontFamily:f.b,textAlign:"left"}}>
+              <div style={{width:36,height:36,borderRadius:10,background:C.blue+"15",border:`1px solid ${C.blue}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:C.blue}}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:700,color:C.text}}>Elegir desde archivos</div>
+                <div style={{fontSize:12,color:C.muted,fontWeight:500,marginTop:2}}>Buscar una foto guardada</div>
+              </div>
+            </button>
+            <button onClick={()=>setMenuOpen(false)}
+              style={{width:"100%",background:"transparent",border:"none",color:C.muted,padding:"12px",cursor:"pointer",fontFamily:f.b,fontSize:13,fontWeight:600,marginTop:4}}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
