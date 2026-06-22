@@ -183,6 +183,17 @@ const Progress=({value,color})=>(
     <div style={{width:`${value}%`,height:"100%",background:color,borderRadius:4,transition:"width 0.6s"}}/>
   </div>
 );
+const RoleSwitcher=({user,onChangeRole})=>{
+  const eligible=(user?.roles||[]).filter(r=>ROLE_META[r]);
+  if(eligible.length<2||!onChangeRole) return null;
+  return (
+    <select value={user.role} onChange={e=>onChangeRole(e.target.value)}
+      style={{background:"rgba(255,255,255,0.1)",color:C.navText,border:`1px solid ${C.navMuted}55`,borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:600,cursor:"pointer",outline:"none",fontFamily:f.b,maxWidth:140}}>
+      {eligible.map(r=><option key={r} value={r} style={{color:"#000"}}>{ROLE_META[r].label}</option>)}
+    </select>
+  );
+};
+
 const TopBar=({title,sub,onBack,onLogout,actions})=>(
   <div style={{background:C.navBg,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:20,boxShadow:"0 1px 0 rgba(0,0,0,0.08)"}}>
     {onBack && (
@@ -2090,7 +2101,7 @@ const ClientsTab=({clients,setClients,allCampaigns,reports})=>{
 };
 
 // ─── ADMIN APP ────────────────────────────────────────────────────────────────
-const AdminApp=({user,onLogout})=>{
+const AdminApp=({user,onLogout,onChangeRole})=>{
   const [tab,setTab]         =useState("dash");
   const [vertical,setVert]   =useState("impl");
   const [implCamps,setImpl]  =useState(INIT_IMPL);
@@ -2177,7 +2188,7 @@ const AdminApp=({user,onLogout})=>{
 
   return(
     <div style={{background:C.bg,minHeight:"100vh",fontFamily:f.b,color:C.text,display:"flex",flexDirection:"column"}}>
-      <TopBar title={user.role==="supervisor"?"TGS Field — Supervisor":"TGS Field — Admin"} sub={`Hola, ${user.name}`} onLogout={onLogout}/>
+      <TopBar title={user.role==="supervisor"?"TGS Field — Supervisor":"TGS Field — Admin"} sub={`Hola, ${user.name}`} onLogout={onLogout} actions={<RoleSwitcher user={user} onChangeRole={onChangeRole}/>}/>
 
       {/* Vertical switcher */}
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",gap:6}}>
@@ -2579,7 +2590,7 @@ const AdminApp=({user,onLogout})=>{
 };
 
 // ─── FIELD USER ───────────────────────────────────────────────────────────────
-const LandingScreen=({user,allCampaigns,onSelect,onLogout})=>{
+const LandingScreen=({user,allCampaigns,onSelect,onLogout,onChangeRole})=>{
   const [boletas,setBoletas]=useState({});
   const [showProfile,setShowProfile]=useState(false);
   const myApproved=INIT_REPORTS.filter(r=>r.user===user.name&&r.status==="approved");
@@ -2592,7 +2603,7 @@ const LandingScreen=({user,allCampaigns,onSelect,onLogout})=>{
 
   return(
   <div style={{minHeight:"100vh",background:C.bg,fontFamily:f.b,color:C.text}}>
-    <TopBar title="TGS Field" sub={`Hola, ${user.name?.split(" ")[0]||""}`} onLogout={onLogout}/>
+    <TopBar title="TGS Field" sub={`Hola, ${user.name?.split(" ")[0]||""}`} onLogout={onLogout} actions={<RoleSwitcher user={user} onChangeRole={onChangeRole}/>}/>
     <div style={{padding:"24px 20px 40px",maxWidth:560,width:"100%",margin:"0 auto",boxSizing:"border-box"}}>
 
       <div onClick={()=>setShowProfile(s=>!s)}
@@ -3322,7 +3333,8 @@ export default function App(){
   if(screen==="register") return <WorkerRegisterScreen onBack={()=>setScreen("home")}/>;
   if(!user)return <LoginScreen onLogin={setUser} onRegister={()=>setScreen("register")}/>;
   if(user.status==="pendiente") return <PendingScreen user={user} onLogout={handleLogout}/>;
-  if(user.role==="admin"||user.role==="supervisor")return <AdminApp user={user} onLogout={handleLogout} onRefresh={loadCampaigns}/>;
+  const changeRole=(r)=>setUser(u=>({...u,role:r}));
+  if(user.role==="admin"||user.role==="supervisor")return <AdminApp user={user} onLogout={handleLogout} onRefresh={loadCampaigns} onChangeRole={changeRole}/>;
   if(screen==="success")return <SuccessScreen type={vertical} onNew={()=>{setCamp(null);setScreen("select");}} onHome={reset}/>;
   const submitReport=async(reportData)=>{
     const {error}=await insertReport(reportData);
@@ -3335,5 +3347,5 @@ export default function App(){
     if(vertical==="mec")  return <MecForm   campaign={campaign} user={user} onBack={()=>setScreen("select")} onSubmit={submitReport}/>;
   }
   if(screen==="select")return <CampaignSelect type={vertical} campaigns={myCamps} onSelect={c=>{setCamp(c);setScreen("form");}} onBack={reset}/>;
-  return <LandingScreen user={user} allCampaigns={allCampaigns} onSelect={v=>{setVert(v);setScreen("select");}} onLogout={handleLogout}/>;
+  return <LandingScreen user={user} allCampaigns={allCampaigns} onSelect={v=>{setVert(v);setScreen("select");}} onLogout={handleLogout} onChangeRole={changeRole}/>;
 }
