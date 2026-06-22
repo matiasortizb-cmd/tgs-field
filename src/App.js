@@ -1116,6 +1116,25 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
                       <input value={sala.address} onChange={e=>editSala(i,"address",e.target.value)} placeholder="Dirección"
                         style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",color:C.text,fontFamily:f.b,fontSize:11,outline:"none",boxSizing:"border-box"}}/>
                     </div>
+                    {form.team.length>0 && (
+                      <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${C.border}`}}>
+                        <div style={{fontSize:10,fontWeight:700,letterSpacing:0.4,color:C.muted,textTransform:"uppercase",marginBottom:5}}>Asignar a:</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                          {form.team.map(n=>{
+                            const on=(sala.assignedTo||[]).includes(n);
+                            return (
+                              <button key={n} type="button" onClick={()=>{
+                                const arr=sala.assignedTo||[];
+                                editSala(i,"assignedTo",on?arr.filter(x=>x!==n):[...arr,n]);
+                              }} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:999,fontSize:10,fontWeight:600,background:on?vt.color+"15":"transparent",color:on?vt.color:C.muted,border:`1px solid ${on?vt.color+"55":C.border}`,cursor:"pointer",fontFamily:f.b,transition:"all .15s"}}>
+                                {on && <span style={{width:5,height:5,borderRadius:"50%",background:vt.color}}/>}
+                                {n.split(" ")[0]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2781,6 +2800,48 @@ const CampaignSelect=({type,campaigns,onSelect,onBack})=>{
   );
 };
 
+// Lista las salas asignadas al worker dentro de una campaña
+const SalaSelect=({type,campaign,user,onSelect,onBack})=>{
+  const vt=VERTICALS[type];
+  const mySalas=(campaign.salas||[]).filter(s=>(s.assignedTo||[]).includes(user.name));
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,fontFamily:f.b,color:C.text}}>
+      <TopBar title={campaign.name} sub={campaign.client} onBack={onBack}/>
+      <div style={{padding:"24px 20px 40px",maxWidth:560,width:"100%",margin:"0 auto",boxSizing:"border-box"}}>
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
+          <h1 style={{margin:0,fontSize:20,fontWeight:800,color:C.text,letterSpacing:-0.3}}>Mis salas</h1>
+          <span style={{fontSize:12,color:C.muted,fontWeight:500}}>{mySalas.length} asignada{mySalas.length!==1?"s":""}</span>
+        </div>
+        {mySalas.length===0 ? (
+          <div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"40px 20px",textAlign:"center"}}>
+            <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>No tenés salas asignadas</div>
+            <p style={{margin:0,color:C.muted,fontSize:13}}>Hablá con el supervisor para que te asigne salas en esta campaña.</p>
+          </div>
+        ) : (
+          <div style={{display:"grid",gap:8}}>
+            {mySalas.map((s,i)=>(
+              <div key={i} onClick={()=>onSelect(s)}
+                style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",cursor:"pointer",position:"relative",transition:"border-color .15s, box-shadow .15s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=vt.color;e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.06)";}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.boxShadow="none";}}>
+                <div style={{position:"absolute",top:0,bottom:0,left:0,width:3,background:vt.color,borderTopLeftRadius:12,borderBottomLeftRadius:12}}/>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    {s.chain && <div style={{fontSize:10,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:3}}>{s.chain}</div>}
+                    <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-0.2}}>{s.name||"Sin nombre"}</div>
+                    {s.address && <div style={{fontSize:11,color:C.muted,marginTop:3,fontWeight:500,display:"inline-flex",alignItems:"center",gap:4}}><Icon name="pin" size={11}/>{s.address}</div>}
+                  </div>
+                  <span style={{color:vt.color,fontWeight:700,fontSize:13,whiteSpace:"nowrap",flexShrink:0}}>Reportar →</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Helpers compartidos por los forms de reporte
 const FormSection=({title,desc,children,style})=>(
   <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",marginBottom:12,...(style||{})}}>
@@ -2830,8 +2891,8 @@ const SubmitBtn=({disabled,onClick,loading,children,accent=C.impl})=>(
   </button>
 );
 
-const MecForm=({campaign,onSubmit,onBack,user})=>{
-  const [form,setForm]=useState({location:"",units:"",material:campaign.material||"",issues:false,issueNote:""});
+const MecForm=({campaign,sala,onSubmit,onBack,user})=>{
+  const [form,setForm]=useState({location:sala?.name||"",units:"",material:campaign.material||"",issues:false,issueNote:""});
   const [photos,setPhotos]=useState({before:null,after:null});
   const [sending,setSending]=useState(false);
   const ts=nowStr();
@@ -2852,7 +2913,15 @@ const MecForm=({campaign,onSubmit,onBack,user})=>{
         <PayHint campaign={campaign} color={C.mec}/>
 
         <FormSection title="Ubicación de trabajo">
-          <Inp label="Bodega / Lugar" placeholder="ej: Bodega Santiago Centro" value={form.location} onChange={e=>setForm({...form,location:e.target.value})}/>
+          {sala ? (
+            <div style={{background:C.surfaceHi,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+              {sala.chain && <div style={{fontSize:10,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:4}}>{sala.chain}</div>}
+              <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-0.2}}>{sala.name}</div>
+              {sala.address && <div style={{fontSize:12,color:C.muted,marginTop:4,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="pin" size={12}/>{sala.address}</div>}
+            </div>
+          ) : (
+            <Inp label="Bodega / Lugar" placeholder="ej: Bodega Santiago Centro" value={form.location} onChange={e=>setForm({...form,location:e.target.value})}/>
+          )}
           <Inp label="Material mecanizado" placeholder={campaign.material||"Tipo de material"} value={form.material} onChange={e=>setForm({...form,material:e.target.value})}/>
         </FormSection>
 
@@ -2896,8 +2965,8 @@ const realGeo=(setGeo,setGl)=>{
   } else { setGeo({lat:0,lng:0}); setGl(false); }
 };
 
-const ImplForm=({campaign,onSubmit,onBack,user})=>{
-  const [form,setForm]=useState({store:"",qty:"",issues:false,issueNote:"",signed:false});
+const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
+  const [form,setForm]=useState({store:sala?.name||"",qty:"",issues:false,issueNote:"",signed:false});
   const [photos,setPhotos]=useState({installed:null,general:null});
   const [geo,setGeo]=useState(null);const[gl,setGl]=useState(false);
   const [sending,setSending]=useState(false);
@@ -2935,7 +3004,15 @@ const ImplForm=({campaign,onSubmit,onBack,user})=>{
         <PayHint campaign={campaign} color={C.impl}/>
 
         <FormSection title="Punto de venta">
-          <Inp label="Local" placeholder="ej: Unimarc Las Condes" value={form.store} onChange={e=>setForm({...form,store:e.target.value})}/>
+          {sala ? (
+            <div style={{background:C.surfaceHi,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px"}}>
+              {sala.chain && <div style={{fontSize:10,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:4}}>{sala.chain}</div>}
+              <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-0.2}}>{sala.name}</div>
+              {sala.address && <div style={{fontSize:12,color:C.muted,marginTop:4,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="pin" size={12}/>{sala.address}</div>}
+            </div>
+          ) : (
+            <Inp label="Local" placeholder="ej: Unimarc Las Condes" value={form.store} onChange={e=>setForm({...form,store:e.target.value})}/>
+          )}
         </FormSection>
 
         <FormSection title="Fotografías" desc="Material instalado y vista del punto de venta">
@@ -2972,8 +3049,8 @@ const ImplForm=({campaign,onSubmit,onBack,user})=>{
   );
 };
 
-const PromoForm=({campaign,onSubmit,onBack,user})=>{
-  const [form,setForm]=useState({point:"",contacts:"",samples:"",obs:"",popOk:true,popNote:"",checkedIn:false});
+const PromoForm=({campaign,sala,onSubmit,onBack,user})=>{
+  const [form,setForm]=useState({point:sala?.name||"",contacts:"",samples:"",obs:"",popOk:true,popNote:"",checkedIn:false});
   const [photos,setPhotos]=useState({activation:null,general:null,pop:null});
   const [geo,setGeo]=useState(null);const[gl,setGl]=useState(false);
   const [entryTime]=useState(nowStr());const[exitTime,setExitTime]=useState(null);
@@ -3031,7 +3108,15 @@ const PromoForm=({campaign,onSubmit,onBack,user})=>{
         </FormSection>
 
         <FormSection title="Punto de activación">
-          <Inp label="Lugar" placeholder="ej: Bar X, Stand Feria" value={form.point} onChange={e=>setForm({...form,point:e.target.value})}/>
+          {sala ? (
+            <div style={{background:C.surfaceHi,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px"}}>
+              {sala.chain && <div style={{fontSize:10,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:4}}>{sala.chain}</div>}
+              <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-0.2}}>{sala.name}</div>
+              {sala.address && <div style={{fontSize:12,color:C.muted,marginTop:4,fontWeight:500,display:"inline-flex",alignItems:"center",gap:5}}><Icon name="pin" size={12}/>{sala.address}</div>}
+            </div>
+          ) : (
+            <Inp label="Lugar" placeholder="ej: Bar X, Stand Feria" value={form.point} onChange={e=>setForm({...form,point:e.target.value})}/>
+          )}
         </FormSection>
 
         <FormSection title="Fotografías" desc="Activación, vista general y material POP">
@@ -3273,6 +3358,7 @@ export default function App(){
   const [user,setUser]       =useState(null);
   const [vertical,setVert]   =useState(null);
   const [campaign,setCamp]   =useState(null);
+  const [sala,setSala]       =useState(null);
   const [screen,setScreen]   =useState("home");
   const [implCamps,setImpl]  =useState([]);
   const [promoCamps,setPromo]=useState([]);
@@ -3314,11 +3400,11 @@ export default function App(){
 
   const handleLogout=async()=>{
     await signOut();
-    setUser(null);setVert(null);setCamp(null);setScreen("home");
+    setUser(null);setVert(null);setCamp(null);setSala(null);setScreen("home");
   };
 
   const allCampaigns=[...implCamps,...promoCamps,...mecCamps];
-  const reset=()=>{setVert(null);setCamp(null);setScreen("home");};
+  const reset=()=>{setVert(null);setCamp(null);setSala(null);setScreen("home");};
   const camps=vertical==="impl"?implCamps:vertical==="promo"?promoCamps:mecCamps;
   // Field workers only see campaigns where they are in the team
   const myCamps=(user?.role==="admin"||user?.role==="supervisor")?camps:camps.filter(c=>c.team?.includes(user?.name));
@@ -3342,10 +3428,16 @@ export default function App(){
     else setScreen("success");
   };
   if(screen==="form"){
-    if(vertical==="impl") return <ImplForm  campaign={campaign} user={user} onBack={()=>setScreen("select")} onSubmit={submitReport}/>;
-    if(vertical==="promo")return <PromoForm campaign={campaign} user={user} onBack={()=>setScreen("select")} onSubmit={submitReport}/>;
-    if(vertical==="mec")  return <MecForm   campaign={campaign} user={user} onBack={()=>setScreen("select")} onSubmit={submitReport}/>;
+    const back=()=>setScreen(sala?"sala-select":"select");
+    if(vertical==="impl") return <ImplForm  campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport}/>;
+    if(vertical==="promo")return <PromoForm campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport}/>;
+    if(vertical==="mec")  return <MecForm   campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport}/>;
   }
-  if(screen==="select")return <CampaignSelect type={vertical} campaigns={myCamps} onSelect={c=>{setCamp(c);setScreen("form");}} onBack={reset}/>;
+  if(screen==="sala-select") return <SalaSelect type={vertical} campaign={campaign} user={user} onSelect={s=>{setSala(s);setScreen("form");}} onBack={()=>{setSala(null);setScreen("select");}}/>;
+  if(screen==="select")return <CampaignSelect type={vertical} campaigns={myCamps} onSelect={c=>{
+    setCamp(c);setSala(null);
+    const hasAssignedSalas=(c.salas||[]).some(s=>(s.assignedTo||[]).includes(user.name));
+    setScreen(hasAssignedSalas?"sala-select":"form");
+  }} onBack={reset}/>;
   return <LandingScreen user={user} allCampaigns={allCampaigns} onSelect={v=>{setVert(v);setScreen("select");}} onLogout={handleLogout} onChangeRole={changeRole}/>;
 }
