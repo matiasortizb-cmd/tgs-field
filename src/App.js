@@ -794,6 +794,17 @@ const CampaignMapView=({workers,salas})=>{
   );
 };
 
+// Formatea un RUT chileno mientras se escribe: 12.345.678-9 (acepta dígitos y K)
+const formatRut=(raw)=>{
+  const clean=(raw||"").replace(/[^0-9kK]/g,"").toUpperCase();
+  if(!clean) return "";
+  if(clean.length===1) return clean;
+  const body=clean.slice(0,-1);
+  const dv=clean.slice(-1);
+  const withDots=body.replace(/\B(?=(\d{3})+(?!\d))/g,".");
+  return `${withDots}-${dv}`;
+};
+
 // ─── CAMPAIGN FORM helpers (a nivel módulo para no perder el foco de inputs al re-render) ──
 // FormSection ya está definido más abajo (shared con los forms de reporte); lo reusamos acá.
 const FormPersonRow=({person,active,onClick,activeColor})=>{
@@ -1285,7 +1296,7 @@ const WorkerRegisterScreen=({onSuccess,onBack})=>{
           {stepTitle("Tus datos personales","Necesitamos algunos datos para crear tu cuenta")}
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"20px 22px",marginBottom:18}}>
             <Inp label="Nombre completo" placeholder="ej: Carlos Muñoz Pérez" value={form.name} onChange={e=>setF("name",e.target.value)}/>
-            <Inp label="RUT" placeholder="ej: 12.345.678-9" value={form.rut} onChange={e=>setF("rut",e.target.value)}/>
+            <Inp label="RUT" placeholder="ej: 12.345.678-9" value={form.rut} onChange={e=>setF("rut",formatRut(e.target.value))}/>
             <Inp label="Teléfono (WhatsApp)" placeholder="+569 XXXX XXXX" value={form.phone} onChange={e=>setF("phone",e.target.value)}/>
             <Inp label="Email" type="email" placeholder="tu@email.com" value={form.email} onChange={e=>setF("email",e.target.value)}/>
             <Inp label="Contraseña" type="password" placeholder="Mínimo 6 caracteres" value={form.password} onChange={e=>setF("password",e.target.value)}/>
