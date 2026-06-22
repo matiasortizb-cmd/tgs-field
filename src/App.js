@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo } from "./supabase";
+import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, updateReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo } from "./supabase";
 import * as XLSX from "xlsx";
 import ClientReport from "./ClientReport";
 
@@ -2781,8 +2781,12 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
 };
 
 // ─── FIELD USER ───────────────────────────────────────────────────────────────
-const LandingScreen=({user,allCampaigns,myReports,onSelect,onLogout,onChangeRole})=>{
+const LandingScreen=({user,allCampaigns,myReports,onSelect,onGoToCampaign,onLogout,onChangeRole})=>{
+  const [rejectedOpen,setRejectedOpen]=useState(false);
   const rejectedReports=(myReports||[]).filter(r=>r.status==="rejected"||r.status==="review"||(r.items||[]).some(it=>it.status==="rejected"));
+  const rejectedCampIds=[...new Set(rejectedReports.map(r=>r.campaignId))];
+  const rejectedCampaigns=rejectedCampIds.map(id=>(allCampaigns||[]).find(c=>c.id===id)).filter(Boolean);
+  const rejectedByType=(t)=>rejectedReports.filter(r=>r.type===t).length;
   const [boletas,setBoletas]=useState({});
   const [showProfile,setShowProfile]=useState(false);
   const myApproved=INIT_REPORTS.filter(r=>r.user===user.name&&r.status==="approved");
@@ -2799,14 +2803,39 @@ const LandingScreen=({user,allCampaigns,myReports,onSelect,onLogout,onChangeRole
     <RoleSwitchBanner user={user} onChangeRole={onChangeRole}/>
     <div style={{padding:"24px 20px 40px",maxWidth:560,width:"100%",margin:"0 auto",boxSizing:"border-box"}}>
       {rejectedReports.length>0 && (
-        <div style={{background:C.red+"12",border:`1px solid ${C.red}55`,borderLeft:`4px solid ${C.red}`,borderRadius:10,padding:"12px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:32,height:32,borderRadius:8,background:C.red+"22",color:C.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <Icon name="x" size={16}/>
-          </div>
-          <div style={{minWidth:0,flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.red,letterSpacing:-0.1}}>Tenés {rejectedReports.length} reporte{rejectedReports.length!==1?"s":""} con observaciones</div>
-            <div style={{fontSize:11,color:C.text,marginTop:2,fontWeight:500}}>Entrá a la campaña correspondiente, corregí lo señalado y volvé a enviar.</div>
-          </div>
+        <div style={{marginBottom:16}}>
+          <button onClick={()=>setRejectedOpen(o=>!o)}
+            style={{width:"100%",background:C.red+"12",border:`1px solid ${C.red}55`,borderLeft:`4px solid ${C.red}`,borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontFamily:f.b,textAlign:"left"}}>
+            <div style={{width:32,height:32,borderRadius:8,background:C.red+"22",color:C.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <Icon name="x" size={16}/>
+            </div>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.red,letterSpacing:-0.1}}>Tenés {rejectedReports.length} reporte{rejectedReports.length!==1?"s":""} con observaciones</div>
+              <div style={{fontSize:11,color:C.text,marginTop:2,fontWeight:500}}>{rejectedOpen?"Tocá una campaña para corregir":"Tocá para ver las campañas"}</div>
+            </div>
+            <span style={{color:C.red,fontWeight:700,fontSize:18,transition:"transform .2s",display:"inline-block",transform:rejectedOpen?"rotate(90deg)":"none"}}>→</span>
+          </button>
+          {rejectedOpen && (
+            <div style={{display:"grid",gap:6,marginTop:8}}>
+              {rejectedCampaigns.map(c=>{
+                const vtc=VERTICALS[c.type]||VERTICALS.impl;
+                const n=rejectedReports.filter(r=>r.campaignId===c.id).length;
+                return (
+                  <button key={c.id} onClick={()=>onGoToCampaign(c)}
+                    style={{background:C.surface,border:`1px solid ${C.red}55`,borderRadius:10,padding:"12px 14px",cursor:"pointer",fontFamily:f.b,textAlign:"left",display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{width:8,height:8,borderRadius:"50%",background:vtc.color,flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text,letterSpacing:-0.1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2,fontWeight:500}}>{c.client} · {vtc.label}</div>
+                    </div>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:999,fontSize:11,fontWeight:700,background:C.red+"15",color:C.red,border:`1px solid ${C.red}33`,whiteSpace:"nowrap"}}>
+                      {n} con observ.
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -2853,12 +2882,17 @@ const LandingScreen=({user,allCampaigns,myReports,onSelect,onLogout,onChangeRole
       </div>
 
       <div style={{display:"grid",gap:10,marginBottom:24}}>
-        {Object.entries(VERTICALS).map(([v,vd])=>(
+        {Object.entries(VERTICALS).map(([v,vd])=>{
+          const rejN=rejectedByType(v);
+          return (
           <div key={v} onClick={()=>onSelect(v)}
-            style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",cursor:"pointer",position:"relative",transition:"border-color .15s, box-shadow .15s"}}
+            style={{background:C.surface,border:`1px solid ${rejN>0?C.red+"55":C.border}`,borderRadius:12,padding:"18px 20px",cursor:"pointer",position:"relative",transition:"border-color .15s, box-shadow .15s"}}
             onMouseEnter={e=>{e.currentTarget.style.borderColor=vd.color;e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.06)";}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.boxShadow="none";}}>
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=rejN>0?C.red+"55":C.border;e.currentTarget.style.boxShadow="none";}}>
             <div style={{position:"absolute",top:0,bottom:0,left:0,width:3,background:vd.color,borderTopLeftRadius:12,borderBottomLeftRadius:12}}/>
+            {rejN>0 && (
+              <span style={{position:"absolute",top:10,right:10,minWidth:22,height:22,borderRadius:11,background:C.red,color:"#fff",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 6px",border:`2px solid ${C.surface}`}}>{rejN}</span>
+            )}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14}}>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
@@ -2867,10 +2901,11 @@ const LandingScreen=({user,allCampaigns,myReports,onSelect,onLogout,onChangeRole
                 </div>
                 <p style={{margin:0,color:C.muted,fontSize:13,lineHeight:1.5,fontWeight:500}}>{vd.desc}</p>
               </div>
-              <span style={{color:vd.color,fontWeight:700,fontSize:13,whiteSpace:"nowrap",flexShrink:0}}>Ir a campañas →</span>
+              <span style={{color:rejN>0?C.red:vd.color,fontWeight:700,fontSize:13,whiteSpace:"nowrap",flexShrink:0}}>{rejN>0?"Corregir →":"Ir a campañas →"}</span>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {campIds.length>0 && (
@@ -2997,7 +3032,8 @@ const CampaignSelect=({type,campaigns,reports,userName,onSelect,onBack})=>{
 const SalaSelect=({type,campaign,user,reports,onSelect,onBack})=>{
   const vt=VERTICALS[type];
   const mySalas=(campaign.salas||[]).filter(s=>(s.assignedTo||[]).includes(user.name));
-  const isSalaRejected=(sName)=>(reports||[]).some(r=>r.campaignId===campaign.id&&r.user===user.name&&(r.store===sName||r.point===sName||r.location===sName)&&(r.status==="rejected"||r.status==="review"||(r.items||[]).some(it=>it.status==="rejected")));
+  const reportForSala=(sName)=>(reports||[]).find(r=>r.campaignId===campaign.id&&r.user===user.name&&(r.store===sName||r.point===sName||r.location===sName)&&(r.status==="rejected"||r.status==="review"||(r.items||[]).some(it=>it.status==="rejected")));
+  const isSalaRejected=(sName)=>!!reportForSala(sName);
   return(
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:f.b,color:C.text}}>
       <TopBar title={campaign.name} sub={campaign.client} onBack={onBack}/>
@@ -3015,8 +3051,9 @@ const SalaSelect=({type,campaign,user,reports,onSelect,onBack})=>{
           <div style={{display:"grid",gap:8}}>
             {mySalas.map((s,i)=>{
               const rej=isSalaRejected(s.name);
+              const prevReport=reportForSala(s.name);
               return (
-              <div key={i} onClick={()=>onSelect(s)}
+              <div key={i} onClick={()=>onSelect(s,prevReport)}
                 style={{background:C.surface,border:`1px solid ${rej?C.red+"55":C.border}`,borderRadius:12,padding:"14px 16px",cursor:"pointer",position:"relative",transition:"border-color .15s, box-shadow .15s"}}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=vt.color;e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.06)";}}
                 onMouseLeave={e=>{e.currentTarget.style.borderColor=rej?C.red+"55":C.border;e.currentTarget.style.boxShadow="none";}}>
@@ -3168,12 +3205,20 @@ const realGeo=(setGeo,setGl)=>{
   } else { setGeo({lat:0,lng:0}); setGl(false); }
 };
 
-const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
+const ImplForm=({campaign,sala,onSubmit,onBack,user,initialReport})=>{
   const initialItems=(campaign?.materials||[]).filter(m=>m && typeof m==="string" && m.trim()).map(name=>({name,photo:null,note:""}));
-  const [form,setForm]=useState({store:sala?.name||"",issues:false,issueNote:"",signed:false});
-  const [items,setItems]=useState(initialItems.length?initialItems:[{name:"",photo:null,note:""}]);
-  const [photoGeneral,setPhotoGeneral]=useState(null);
-  const [signedPhoto,setSignedPhoto]=useState(null);
+  const seedItems=initialReport?.items?.length
+    ? initialReport.items.map(it=>({...it,_status:it.status,status:it.status==="rejected"?"pending":it.status}))
+    : (initialItems.length?initialItems:[{name:"",photo:null,note:""}]);
+  const [form,setForm]=useState({
+    store:sala?.name||initialReport?.store||"",
+    issues:initialReport?.issues||false,
+    issueNote:initialReport?.issueNote||"",
+    signed:initialReport?.signed||false
+  });
+  const [items,setItems]=useState(seedItems);
+  const [photoGeneral,setPhotoGeneral]=useState(initialReport?.photos_urls?.[1]||null);
+  const [signedPhoto,setSignedPhoto]=useState(initialReport?.signedPhoto||null);
   const [geo,setGeo]=useState(null);const[gl,setGl]=useState(false);
   const [sending,setSending]=useState(false);
   const ts=nowStr();
@@ -3185,13 +3230,20 @@ const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
   const canSubmit=itemsValid.length>0;
   const handleSubmit=async()=>{
     setSending(true);
-    const cleanItems=items.filter(it=>it.name.trim()&&it.photo).map(it=>({name:it.name.trim(),photo:it.photo,note:it.note||"",status:"pending"}));
-    await onSubmit({type:"impl",campaignId:campaign.id,user:user?.name,status:"pending",date:ts,
+    const cleanItems=items.filter(it=>it.name.trim()&&it.photo).map(it=>({
+      name:it.name.trim(),photo:it.photo,note:it.note||"",
+      // Si ya estaba aprobado, mantener; si era rejected y tiene nueva foto, vuelve a pending para revisión
+      status: it._status==="approved" ? "approved" : "pending",
+      // conservar la nota del supervisor como referencia histórica si existía
+      supervisorNote: it.supervisorNote||""
+    }));
+    const payload={type:"impl",campaignId:campaign.id,user:user?.name,status:"pending",date:ts,
       store:form.store,qty:cleanItems.length,
       items:cleanItems,
       issues:form.issues,issueNote:form.issueNote,signed:form.signed,signedPhoto:form.signed?signedPhoto:null,
       photos:{a:cleanItems[0]?.photo,b:photoGeneral,c:form.signed?signedPhoto:null},geo,
-    });
+    };
+    await onSubmit(payload,initialReport?.id);
     setSending(false);
   };
   return(
@@ -3229,25 +3281,44 @@ const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
           )}
         </FormSection>
 
-        <FormSection title="Elementos instalados" desc="Agregá un item por cada elemento POP. Cada uno con su foto.">
+        <FormSection title={initialReport?"Corregir elementos":"Elementos instalados"} desc={initialReport?"Los aprobados quedan como están. Los rechazados los podés rehacer.":"Agregá un item por cada elemento POP. Cada uno con su foto."}>
           <div style={{display:"grid",gap:12}}>
-            {items.map((it,i)=>(
-              <div key={i} style={{background:C.surfaceHi,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px"}}>
+            {items.map((it,i)=>{
+              const wasRejected=it._status==="rejected";
+              const wasApproved=it._status==="approved";
+              return (
+              <div key={i} style={{background:C.surfaceHi,border:`1px solid ${wasRejected?C.red+"55":wasApproved?C.green+"55":C.border}`,borderRadius:12,padding:"12px 14px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
-                  <span style={{fontSize:10,fontWeight:700,letterSpacing:0.5,color:C.muted,textTransform:"uppercase"}}>Elemento {i+1}</span>
-                  {items.length>1 && (
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:10,fontWeight:700,letterSpacing:0.5,color:C.muted,textTransform:"uppercase"}}>Elemento {i+1}</span>
+                    {wasRejected && <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px",borderRadius:999,fontSize:9,fontWeight:700,background:C.red+"15",color:C.red,border:`1px solid ${C.red}33`,letterSpacing:0.3}}>RECHAZADO</span>}
+                    {wasApproved && <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px",borderRadius:999,fontSize:9,fontWeight:700,background:C.green+"15",color:C.green,border:`1px solid ${C.green}33`,letterSpacing:0.3}}>APROBADO</span>}
+                  </div>
+                  {items.length>1 && !wasApproved && (
                     <button type="button" onClick={()=>removeItem(i)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",padding:4,display:"inline-flex"}} title="Quitar">
                       <Icon name="x" size={14}/>
                     </button>
                   )}
                 </div>
-                <input value={it.name} onChange={e=>editItem(i,"name",e.target.value)} placeholder="Nombre del elemento (ej: Cooler exhibidor)"
-                  style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 11px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:8}}/>
-                <PhotoSlot label={it.name||"Foto del elemento"} captured={it.photo} onCapture={url=>editItem(i,"photo",url)}/>
-                <textarea value={it.note} onChange={e=>editItem(i,"note",e.target.value)} placeholder="Nota (opcional)"
-                  style={{width:"100%",minHeight:48,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 11px",color:C.text,fontFamily:f.b,fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",marginTop:8}}/>
+                {wasRejected && it.supervisorNote && (
+                  <div style={{background:C.red+"12",border:`1px solid ${C.red}33`,borderLeft:`3px solid ${C.red}`,borderRadius:8,padding:"8px 11px",marginBottom:8,fontSize:12,color:C.text,fontWeight:500,lineHeight:1.4}}>
+                    <span style={{color:C.red,fontWeight:700}}>Supervisor:</span> {it.supervisorNote}
+                  </div>
+                )}
+                <input value={it.name} onChange={e=>editItem(i,"name",e.target.value)} disabled={wasApproved} placeholder="Nombre del elemento (ej: Cooler exhibidor)"
+                  style={{width:"100%",background:wasApproved?C.surfaceHi:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 11px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:8,opacity:wasApproved?0.7:1}}/>
+                {wasApproved && it.photo ? (
+                  <div style={{position:"relative",borderRadius:10,overflow:"hidden",aspectRatio:"4/3"}}>
+                    <img src={it.photo} alt={it.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                  </div>
+                ) : (
+                  <PhotoSlot label={it.name||"Foto del elemento"} captured={it.photo} onCapture={url=>editItem(i,"photo",url)}/>
+                )}
+                <textarea value={it.note} onChange={e=>editItem(i,"note",e.target.value)} disabled={wasApproved} placeholder="Nota (opcional)"
+                  style={{width:"100%",minHeight:48,background:wasApproved?C.surfaceHi:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 11px",color:C.text,fontFamily:f.b,fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",marginTop:8,opacity:wasApproved?0.7:1}}/>
               </div>
-            ))}
+              );
+            })}
           </div>
           <button type="button" onClick={addItem} style={{width:"100%",marginTop:10,background:"transparent",border:`1px dashed ${C.border}`,color:C.muted,borderRadius:10,padding:"10px",fontFamily:f.b,fontSize:13,fontWeight:600,cursor:"pointer"}}>+ Agregar otro elemento</button>
         </FormSection>
@@ -3279,7 +3350,7 @@ const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
         </FormSection>
 
         <SubmitBtn disabled={!form.store||!canSubmit} loading={sending} onClick={handleSubmit} accent={C.impl}>
-          Enviar reporte ({itemsValid.length} elemento{itemsValid.length!==1?"s":""})
+          {initialReport?"Reenviar reporte corregido":"Enviar reporte"} ({itemsValid.length} elemento{itemsValid.length!==1?"s":""})
         </SubmitBtn>
       </div>
     </div>
@@ -3596,6 +3667,7 @@ export default function App(){
   const [vertical,setVert]   =useState(null);
   const [campaign,setCamp]   =useState(null);
   const [sala,setSala]       =useState(null);
+  const [editingReport,setEditingReport]=useState(null);
   const [screen,setScreen]   =useState("home");
   const [implCamps,setImpl]  =useState([]);
   const [promoCamps,setPromo]=useState([]);
@@ -3646,11 +3718,16 @@ export default function App(){
 
   const handleLogout=async()=>{
     await signOut();
-    setUser(null);setVert(null);setCamp(null);setSala(null);setScreen("home");
+    setUser(null);setVert(null);setCamp(null);setSala(null);setEditingReport(null);setScreen("home");
   };
 
   const allCampaigns=[...implCamps,...promoCamps,...mecCamps];
-  const reset=()=>{setVert(null);setCamp(null);setSala(null);setScreen("home");};
+  const reset=()=>{setVert(null);setCamp(null);setSala(null);setEditingReport(null);setScreen("home");};
+  const goToCampaign=(c)=>{
+    setVert(c.type); setCamp(c); setSala(null); setEditingReport(null);
+    const hasAssignedSalas=(c.salas||[]).some(s=>(s.assignedTo||[]).includes(user.name));
+    setScreen(hasAssignedSalas?"sala-select":"form");
+  };
   const camps=vertical==="impl"?implCamps:vertical==="promo"?promoCamps:mecCamps;
   // Field workers only see campaigns where they are in the team
   const myCamps=(user?.role==="admin"||user?.role==="supervisor")?camps:camps.filter(c=>c.team?.includes(user?.name));
@@ -3668,22 +3745,28 @@ export default function App(){
   const changeRole=(r)=>setUser(u=>({...u,role:r}));
   if(user.role==="admin"||user.role==="supervisor")return <AdminApp user={user} onLogout={handleLogout} onRefresh={loadCampaigns} onChangeRole={changeRole}/>;
   if(screen==="success")return <SuccessScreen type={vertical} onNew={()=>{setCamp(null);setScreen("select");}} onHome={reset}/>;
-  const submitReport=async(reportData)=>{
-    const {error}=await insertReport(reportData);
-    if(error) alert("Error al guardar reporte: "+error.message);
-    else setScreen("success");
+  const submitReport=async(reportData, editingId)=>{
+    if(editingId){
+      const {error}=await updateReport(editingId,reportData);
+      if(error) alert("Error al actualizar reporte: "+error.message);
+      else { await loadMyReports(user.name); setScreen("success"); }
+    } else {
+      const {error}=await insertReport(reportData);
+      if(error) alert("Error al guardar reporte: "+error.message);
+      else { await loadMyReports(user.name); setScreen("success"); }
+    }
   };
   if(screen==="form"){
     const back=()=>setScreen(sala?"sala-select":"select");
-    if(vertical==="impl") return <ImplForm  campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport}/>;
+    if(vertical==="impl") return <ImplForm  campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport} initialReport={editingReport}/>;
     if(vertical==="promo")return <PromoForm campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport}/>;
     if(vertical==="mec")  return <MecForm   campaign={campaign} sala={sala} user={user} onBack={back} onSubmit={submitReport}/>;
   }
-  if(screen==="sala-select") return <SalaSelect type={vertical} campaign={campaign} user={user} reports={myReports} onSelect={s=>{setSala(s);setScreen("form");}} onBack={()=>{setSala(null);setScreen("select");}}/>;
+  if(screen==="sala-select") return <SalaSelect type={vertical} campaign={campaign} user={user} reports={myReports} onSelect={(s,prevReport)=>{setSala(s);setEditingReport(prevReport||null);setScreen("form");}} onBack={()=>{setSala(null);setEditingReport(null);setScreen("select");}}/>;
   if(screen==="select")return <CampaignSelect type={vertical} campaigns={myCamps} reports={myReports} userName={user.name} onSelect={c=>{
     setCamp(c);setSala(null);
     const hasAssignedSalas=(c.salas||[]).some(s=>(s.assignedTo||[]).includes(user.name));
     setScreen(hasAssignedSalas?"sala-select":"form");
   }} onBack={reset}/>;
-  return <LandingScreen user={user} allCampaigns={allCampaigns} myReports={myReports} onSelect={v=>{setVert(v);setScreen("select");}} onLogout={handleLogout} onChangeRole={changeRole}/>;
+  return <LandingScreen user={user} allCampaigns={allCampaigns} myReports={myReports} onSelect={v=>{setVert(v);setScreen("select");}} onGoToCampaign={goToCampaign} onLogout={handleLogout} onChangeRole={changeRole}/>;
 }

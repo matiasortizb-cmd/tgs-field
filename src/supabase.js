@@ -144,6 +144,7 @@ export const getReports = (campaignId) => {
 export const getMyReports = (workerName) =>
   supabase.from('reports').select('*').eq('worker_name', workerName).order('created_at', { ascending: false });
 export const insertReport = (r) => supabase.from('reports').insert(toDbReport(r)).select().single();
+export const updateReport = (id, patch) => supabase.from('reports').update(toDbReport(patch)).eq('id', id).select().single();
 export const updateReportStatus = (id, status, comment) =>
   supabase.from('reports').update({ status, supervisor_comment: comment }).eq('id', id);
 export const updateReportApproval = (id, status, comment, supervisorName) =>
