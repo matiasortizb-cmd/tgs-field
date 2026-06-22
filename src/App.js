@@ -1216,8 +1216,9 @@ const WorkerRegisterScreen=({onSuccess,onBack})=>{
       const initials=form.name.split(" ").map(n=>n[0]).join("").toUpperCase().slice(0,2);
       const {error:wErr}=await insertWorker({
         name:form.name,rut:form.rut,phone:form.phone,email:form.email.trim().toLowerCase(),
-        region:form.region,comuna:form.comuna,address:form.address,address_detail:form.addressDetail,
+        region:form.region,comuna:form.comuna,address:form.address,address_detail:form.addressDetail||null,
         roles:form.roles,bank:form.bank,account_type:form.accountType,account_number:form.account,
+        photo_url:form.photo||null,
         status:"pendiente",
       });
       if(wErr) throw wErr;
