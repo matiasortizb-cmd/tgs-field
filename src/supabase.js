@@ -18,13 +18,50 @@ export const insertWorker = (w) => supabase.from('workers').insert(w).select().s
 export const updateWorker = (id, patch) => supabase.from('workers').update(patch).eq('id', id);
 
 // CAMPAIGNS
+// El form usa camelCase, la tabla usa snake_case → mapeamos en cada dirección
+const toDbCampaign = (c) => {
+  const out = {};
+  if (c.type !== undefined) out.type = c.type;
+  if (c.client !== undefined) out.client = c.client;
+  if (c.client_id !== undefined) out.client_id = c.client_id || null;
+  if (c.name !== undefined) out.name = c.name;
+  if (c.status !== undefined) out.status = c.status;
+  if (c.team !== undefined) out.team = c.team;
+  if (c.dateStart !== undefined) out.date_start = c.dateStart || null;
+  if (c.dateEnd !== undefined) out.date_end = c.dateEnd || null;
+  if (c.payMode !== undefined) out.pay_mode = c.payMode || null;
+  if (c.payAmount !== undefined) out.pay_amount = Number(c.payAmount) || 0;
+  if (c.targetContacts !== undefined) out.target_contacts = c.targetContacts ? Number(c.targetContacts) : null;
+  if (c.targetSamples !== undefined) out.target_samples = c.targetSamples ? Number(c.targetSamples) : null;
+  if (c.days !== undefined) out.days = c.days ? Number(c.days) : null;
+  if (c.totalUnits !== undefined) out.total_units = c.totalUnits ? Number(c.totalUnits) : null;
+  if (c.material !== undefined) out.material = c.material || null;
+  if (c.materials !== undefined) out.materials = c.materials || [];
+  if (c.salas !== undefined) out.salas = c.salas || [];
+  if (c.supervisors !== undefined) out.supervisors = c.supervisors || [];
+  if (c.done !== undefined) out.done = c.done;
+  return out;
+};
+export const fromDbCampaign = (c) => c && {
+  ...c,
+  dateStart: c.date_start || c.dateStart || '',
+  dateEnd: c.date_end || c.dateEnd || '',
+  payMode: c.pay_mode || c.payMode || '',
+  payAmount: c.pay_amount ?? c.payAmount ?? '',
+  targetContacts: c.target_contacts ?? c.targetContacts,
+  targetSamples: c.target_samples ?? c.targetSamples,
+  totalUnits: c.total_units ?? c.totalUnits,
+  supervisors: c.supervisors || [],
+  salas: c.salas || [],
+  _saved: true,
+};
 export const getCampaigns = (type) => {
   let q = supabase.from('campaigns').select('*').order('created_at', { ascending: false });
   if (type) q = q.eq('type', type);
   return q;
 };
-export const insertCampaign = (c) => supabase.from('campaigns').insert(c).select().single();
-export const updateCampaign = (id, patch) => supabase.from('campaigns').update(patch).eq('id', id);
+export const insertCampaign = (c) => supabase.from('campaigns').insert(toDbCampaign(c)).select().single();
+export const updateCampaign = (id, patch) => supabase.from('campaigns').update(toDbCampaign(patch)).eq('id', id);
 export const deleteCampaign = (id) => supabase.from('campaigns').delete().eq('id', id);
 
 // CLIENTS

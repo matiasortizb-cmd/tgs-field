@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, updateReportStatus, updateReportApproval, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo } from "./supabase";
+import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, updateReportStatus, updateReportApproval, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo } from "./supabase";
 import * as XLSX from "xlsx";
 import ClientReport from "./ClientReport";
 
@@ -2119,9 +2119,9 @@ const AdminApp=({user,onLogout})=>{
         getCampaigns('impl'),getCampaigns('promo'),getCampaigns('mec'),
         getReports(),getWorkers(),getClients()
       ]);
-      if(i.data&&i.data.length) setImpl(i.data);
-      if(p.data&&p.data.length) setPromo(p.data);
-      if(m.data&&m.data.length) setMec(m.data);
+      if(i.data&&i.data.length) setImpl(i.data.map(fromDbCampaign));
+      if(p.data&&p.data.length) setPromo(p.data.map(fromDbCampaign));
+      if(m.data&&m.data.length) setMec(m.data.map(fromDbCampaign));
       if(r.data&&r.data.length) setReports(r.data);
       if(w.data&&w.data.length) setWorkers(w.data.map(normalizeWorker));
       if(cl.data) setClients(cl.data);
@@ -2145,7 +2145,7 @@ const AdminApp=({user,onLogout})=>{
       if(!c.client) c.client="TGS";
       const {data,error}=await insertCampaign(c);
       if(error){ alert("Error guardando campaña: "+(error.message||JSON.stringify(error))); return; }
-      if(data) c={...c,...data,_saved:true};
+      if(data) c={...c,...fromDbCampaign(data)};
     }
     setTarget(prev=>{const idx=prev.findIndex(x=>x.id===c.id);return idx>=0?prev.map(x=>x.id===c.id?c:x):[...prev,c];});
     setView("list");setSel(null);setNewType(null);
