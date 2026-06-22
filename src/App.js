@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, updateReportStatus, updateReportApproval, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, signUp, signIn, signOut, getSession, getWorkerByEmail } from "./supabase";
+import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, updateReportStatus, updateReportApproval, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo } from "./supabase";
 import * as XLSX from "xlsx";
 import ClientReport from "./ClientReport";
 
@@ -793,10 +793,10 @@ const CampaignMapView=({workers,salas})=>{
 };
 
 // ─── CAMPAIGN FORM ────────────────────────────────────────────────────────────
-const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers})=>{
+const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbClients,onClientCreated})=>{
   const vt=VERTICALS[type];
   const blankSala={name:"",chain:"",address:"",lat:null,lng:null};
-  const blank={client:"",name:"",dateStart:"",dateEnd:"",team:[],supervisors:[],status:"activa",payMode:PAY_MODES[0],payAmount:"",
+  const blank={client:"",client_id:null,name:"",dateStart:"",dateEnd:"",team:[],supervisors:[],status:"activa",payMode:PAY_MODES[0],payAmount:"",
     ...(type==="impl"?{salas:[{...blankSala}],materials:[""]}:{}),
     ...(type==="promo"?{salas:[{...blankSala}],targetContacts:"",targetSamples:"",days:""}:{}),
     ...(type==="mec"?{material:"",totalUnits:""}:{}),
@@ -867,6 +867,9 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers})=>{
   };
 
   const salasWithCoords=(form.salas||[]).filter(s=>s.lat&&s.lng);
+  const [showNewClient,setShowNewClient]=useState(false);
+  const clientsList=dbClients||[];
+  const selectedClient=clientsList.find(c=>c.id===form.client_id)||clientsList.find(c=>c.name===form.client);
 
   // Helpers visuales locales del form
   const sectionTitle=(label,desc)=>(
@@ -915,7 +918,41 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers})=>{
 
           <Section>
             {sectionTitle("Datos del cliente","Información general de la campaña")}
-            <Inp label="Cliente / Marca" placeholder="ej: Coca-Cola" value={form.client} onChange={e=>setF("client",e.target.value)}/>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:700,letterSpacing:0.4,color:C.muted,textTransform:"uppercase",marginBottom:6,display:"block"}}>Cliente *</label>
+              {clientsList.length>0 ? (
+                <div style={{display:"flex",gap:8}}>
+                  <select value={form.client_id||""} onChange={e=>{
+                      const id=e.target.value;
+                      if(id==="__new__"){ setShowNewClient(true); return; }
+                      const c=clientsList.find(x=>x.id===id);
+                      setForm(p=>({...p,client_id:id||null,client:c?.name||""}));
+                    }}
+                    style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",color:C.text,fontFamily:f.b,fontSize:14,outline:"none",cursor:"pointer"}}>
+                    <option value="">Selecciona un cliente…</option>
+                    {clientsList.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                    <option value="__new__">+ Crear nuevo cliente</option>
+                  </select>
+                </div>
+              ) : (
+                <button type="button" onClick={()=>setShowNewClient(true)}
+                  style={{width:"100%",background:"transparent",border:`1px dashed ${C.border}`,borderRadius:10,padding:"14px 16px",color:C.text,fontFamily:f.b,fontSize:13,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  <Icon name="plus" size={14}/> Crear primer cliente
+                </button>
+              )}
+              {selectedClient && (
+                <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.surfaceHi,borderRadius:8}}>
+                  <div style={{width:28,height:28,borderRadius:6,background:selectedClient.logo_url?"transparent":C.surface,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
+                    {selectedClient.logo_url ? <img src={selectedClient.logo_url} alt={selectedClient.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+                      : <span style={{fontSize:10,fontWeight:700,color:C.muted}}>{(selectedClient.name||"?").slice(0,2).toUpperCase()}</span>}
+                  </div>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600,color:C.text}}>{selectedClient.name}</div>
+                    {selectedClient.contact_name && <div style={{fontSize:11,color:C.muted}}>{selectedClient.contact_name}</div>}
+                  </div>
+                </div>
+              )}
+            </div>
             <Inp label="Nombre de campaña" placeholder="ej: Verano 2025" value={form.name} onChange={e=>setF("name",e.target.value)}/>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <Inp label="Fecha inicio" type="date" value={form.dateStart} onChange={e=>setF("dateStart",e.target.value)}/>
@@ -1130,6 +1167,14 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers})=>{
       <div style={{width:"33%",flexShrink:0,position:"relative",background:C.bg}}>
         <CampaignMapView workers={[...fallbackPeople,...supervisorPeople]} salas={form.salas||[]}/>
       </div>
+
+      {showNewClient && (
+        <ClientForm onSave={(c)=>{
+          onClientCreated&&onClientCreated(c);
+          setForm(p=>({...p,client_id:c.id,client:c.name}));
+          setShowNewClient(false);
+        }} onCancel={()=>setShowNewClient(false)}/>
+      )}
     </div>
   );
 };
@@ -1692,6 +1737,273 @@ const WorkersTab=({workers,setWorkers,allCampaigns})=>{
   );
 };
 
+// ─── CLIENTS ──────────────────────────────────────────────────────────────────
+const ClientForm=({initial,onSave,onCancel})=>{
+  const [name,setName]=useState(initial?.name||"");
+  const [logoUrl,setLogoUrl]=useState(initial?.logo_url||"");
+  const [contactName,setContactName]=useState(initial?.contact_name||"");
+  const [contactEmail,setContactEmail]=useState(initial?.contact_email||"");
+  const [contactPhone,setContactPhone]=useState(initial?.contact_phone||"");
+  const [notes,setNotes]=useState(initial?.notes||"");
+  const [uploading,setUploading]=useState(false);
+  const [err,setErr]=useState("");
+  const [saving,setSaving]=useState(false);
+  const fileRef=useRef(null);
+
+  const handleLogo=async(e)=>{
+    const file=e.target.files?.[0];
+    if(!file) return;
+    if(!name.trim()){setErr("Escribe el nombre del cliente antes de subir el logo");return;}
+    setErr("");setUploading(true);
+    try{ const url=await uploadClientLogo(file,name.trim()); setLogoUrl(url); }
+    catch(ex){ setErr("No se pudo subir el logo: "+(ex.message||ex)); }
+    setUploading(false);
+  };
+
+  const submit=async()=>{
+    if(!name.trim()){setErr("El nombre es obligatorio");return;}
+    setErr("");setSaving(true);
+    const payload={name:name.trim(),logo_url:logoUrl||null,contact_name:contactName||null,contact_email:contactEmail||null,contact_phone:contactPhone||null,notes:notes||null};
+    try{
+      if(initial?.id){
+        await updateClient(initial.id,payload);
+        onSave({...initial,...payload});
+      } else {
+        const {data,error}=await insertClient(payload);
+        if(error) throw error;
+        onSave(data);
+      }
+    }catch(ex){ setErr(ex.message||"Error al guardar"); }
+    setSaving(false);
+  };
+
+  return(
+    <div onClick={onCancel} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.surface,borderRadius:14,padding:"24px 22px",width:"100%",maxWidth:460,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 50px rgba(0,0,0,0.25)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+          <h2 style={{margin:0,fontSize:18,fontWeight:800,color:C.text,letterSpacing:-0.3}}>{initial?"Editar cliente":"Nuevo cliente"}</h2>
+          <button onClick={onCancel} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",padding:4}}><Icon name="x" size={18}/></button>
+        </div>
+
+        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
+          <div onClick={()=>fileRef.current?.click()}
+            style={{width:72,height:72,borderRadius:14,border:`1.5px dashed ${C.border}`,background:logoUrl?"transparent":C.surfaceHi,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",overflow:"hidden",flexShrink:0}}>
+            {logoUrl ? <img src={logoUrl} alt="logo" style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+              : <Icon name="plus" size={20} color={C.muted}/>}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:4}}>Logo del cliente</div>
+            <div style={{fontSize:11,color:C.muted,fontWeight:500}}>{uploading?"Subiendo…":logoUrl?"Click en la imagen para reemplazar":"Click en el cuadro para subir"}</div>
+            <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleLogo}/>
+          </div>
+        </div>
+
+        <Inp label="Nombre del cliente *" placeholder="ej: Coca-Cola" value={name} onChange={e=>setName(e.target.value)}/>
+        <Inp label="Nombre de contacto" placeholder="ej: Juan Pérez" value={contactName} onChange={e=>setContactName(e.target.value)}/>
+        <Inp label="Email de contacto" type="email" placeholder="juan@cocacola.cl" value={contactEmail} onChange={e=>setContactEmail(e.target.value)}/>
+        <Inp label="Teléfono de contacto" placeholder="+56 9 XXXX XXXX" value={contactPhone} onChange={e=>setContactPhone(e.target.value)}/>
+        <Inp label="Notas" textarea placeholder="Observaciones, condiciones comerciales, etc." value={notes} onChange={e=>setNotes(e.target.value)}/>
+
+        {err && <div style={{padding:"10px 12px",background:C.red+"15",border:`1px solid ${C.red}33`,borderRadius:10,color:C.red,fontSize:13,fontWeight:500,marginBottom:14}}>{err}</div>}
+
+        <div style={{display:"flex",gap:10,marginTop:6}}>
+          <button onClick={onCancel} style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,color:C.text,borderRadius:10,padding:"12px 18px",fontFamily:f.b,fontSize:13,fontWeight:600,cursor:"pointer"}}>Cancelar</button>
+          <button onClick={submit} disabled={saving||!name.trim()}
+            style={{flex:1,background:saving||!name.trim()?C.surfaceHi:C.impl,color:saving||!name.trim()?C.muted:pickTextOn(C.impl),border:"none",borderRadius:10,padding:"12px 18px",fontFamily:f.b,fontSize:13,fontWeight:700,cursor:saving||!name.trim()?"default":"pointer"}}>
+            {saving?"Guardando…":(initial?"Guardar cambios":"Crear cliente")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ClientDetail=({client,allCampaigns,reports,onBack,onEdit,onDelete})=>{
+  const camps=allCampaigns.filter(c=>c.client_id===client.id||c.client===client.name);
+  const active=camps.filter(c=>c.status==="activa").length;
+  const done=camps.filter(c=>c.status==="completada").length;
+  const allReports=reports.filter(r=>camps.some(c=>c.id===r.campaignId));
+  const pendingReports=allReports.filter(r=>r.status==="pending").length;
+  const approvedReports=allReports.filter(r=>r.status==="approved").length;
+  const totalSalas=camps.reduce((s,c)=>s+((c.salas||[]).length),0);
+  const byType={impl:0,promo:0,mec:0};
+  camps.forEach(c=>{ byType[c.type]=(byType[c.type]||0)+1; });
+  const maxType=Math.max(byType.impl,byType.promo,byType.mec,1);
+
+  return(
+    <div style={{paddingBottom:80}}>
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:24}}>
+        <button onClick={onBack} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,padding:"6px 10px",cursor:"pointer",color:C.text,display:"inline-flex",alignItems:"center",gap:6,fontFamily:f.b,fontSize:12,fontWeight:600}}>
+          <Icon name="arrow" size={14}/> Volver
+        </button>
+        <button onClick={onEdit} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,padding:"6px 10px",cursor:"pointer",color:C.text,fontFamily:f.b,fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}>
+          <Icon name="edit" size={14}/> Editar
+        </button>
+        <button onClick={()=>{if(window.confirm(`¿Eliminar el cliente "${client.name}"? Las campañas no se borran, solo quedan sin cliente vinculado.`)) onDelete(client.id);}}
+          style={{background:"transparent",border:"none",color:C.red,fontFamily:f.b,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:"auto"}}>
+          Eliminar
+        </button>
+      </div>
+
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"22px 24px",marginBottom:18,display:"flex",alignItems:"center",gap:18}}>
+        <div style={{width:88,height:88,borderRadius:14,background:client.logo_url?"transparent":C.surfaceHi,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
+          {client.logo_url ? <img src={client.logo_url} alt={client.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+            : <span style={{fontSize:28,fontWeight:800,color:C.muted}}>{(client.name||"?").slice(0,2).toUpperCase()}</span>}
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <h1 style={{margin:0,fontSize:22,fontWeight:800,color:C.text,letterSpacing:-0.4}}>{client.name}</h1>
+          {(client.contact_name||client.contact_email||client.contact_phone) && (
+            <div style={{display:"flex",flexWrap:"wrap",gap:12,marginTop:8,fontSize:12,color:C.muted,fontWeight:500}}>
+              {client.contact_name && <span style={{display:"inline-flex",alignItems:"center",gap:5}}><Icon name="users" size={12}/>{client.contact_name}</span>}
+              {client.contact_email && <span style={{display:"inline-flex",alignItems:"center",gap:5}}><Icon name="mail" size={12}/>{client.contact_email}</span>}
+              {client.contact_phone && <span style={{display:"inline-flex",alignItems:"center",gap:5}}><Icon name="phone" size={12}/>{client.contact_phone}</span>}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:18}}>
+        {[{label:"Campañas",value:camps.length,color:C.impl},{label:"Activas",value:active,color:C.green},{label:"Completadas",value:done,color:C.muted},{label:"Salas totales",value:totalSalas,color:C.text},{label:"Reportes aprobados",value:approvedReports,color:C.green},{label:"Reportes pendientes",value:pendingReports,color:C.orange}].map((kpi,i)=>(
+          <div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px"}}>
+            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:6}}>{kpi.label}</div>
+            <div style={{fontSize:24,fontWeight:700,color:kpi.color,letterSpacing:-0.5,lineHeight:1}}>{kpi.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {camps.length>0 && (
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",marginBottom:18}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:12,letterSpacing:-0.2}}>Distribución por tipo</div>
+          {Object.entries({impl:"Implementación",promo:"Promotores",mec:"Mecanización"}).map(([k,label])=>{
+            const vt=VERTICALS[k];
+            const v=byType[k]||0;
+            return(
+              <div key={k} style={{marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,fontSize:12,fontWeight:600,color:C.text}}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:6,height:6,borderRadius:"50%",background:vt.color}}/>{label}</span>
+                  <span style={{color:C.muted,fontWeight:500}}>{v}</span>
+                </div>
+                <div style={{height:6,background:C.surfaceHi,borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${(v/maxType)*100}%`,background:vt.color,transition:"width .3s"}}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{marginBottom:10,display:"flex",alignItems:"baseline",justifyContent:"space-between"}}>
+        <h2 style={{margin:0,fontSize:15,fontWeight:700,color:C.text}}>Campañas del cliente</h2>
+        <span style={{fontSize:11,color:C.muted,fontWeight:600}}>{camps.length} en total</span>
+      </div>
+      {camps.length===0 ? (
+        <div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"40px 20px",textAlign:"center",color:C.muted,fontSize:13}}>Este cliente aún no tiene campañas.</div>
+      ) : (
+        <div style={{display:"grid",gap:8}}>
+          {camps.map(c=>{
+            const cvt=VERTICALS[c.type]||VERTICALS.impl;
+            return(
+              <div key={c.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",position:"relative"}}>
+                <div style={{position:"absolute",top:0,bottom:0,left:0,width:3,background:cvt.color,borderTopLeftRadius:12,borderBottomLeftRadius:12}}/>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,color:C.text,letterSpacing:-0.2}}>{c.name}</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:3,fontWeight:500}}>{cvt.label} · {c.status||"—"} · {c.dateStart||"—"} → {c.dateEnd||"—"}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ClientsTab=({clients,setClients,allCampaigns,reports})=>{
+  const [view,setView]=useState("list");
+  const [selected,setSel]=useState(null);
+  const [editing,setEditing]=useState(null);
+
+  const handleSaved=(c)=>{
+    setClients(prev=>{
+      const idx=prev.findIndex(x=>x.id===c.id);
+      return idx>=0?prev.map(x=>x.id===c.id?c:x):[...prev,c];
+    });
+    setEditing(null);
+    if(view==="detail") setSel(c);
+  };
+  const handleDelete=async(id)=>{
+    await deleteClient(id);
+    setClients(prev=>prev.filter(x=>x.id!==id));
+    setView("list");setSel(null);
+  };
+
+  if(view==="detail"&&selected){
+    return(
+      <>
+        <ClientDetail client={selected} allCampaigns={allCampaigns} reports={reports}
+          onBack={()=>{setView("list");setSel(null);}}
+          onEdit={()=>setEditing(selected)}
+          onDelete={handleDelete}/>
+        {editing && <ClientForm initial={editing} onSave={handleSaved} onCancel={()=>setEditing(null)}/>}
+      </>
+    );
+  }
+
+  return(
+    <div style={{paddingBottom:80}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,gap:10}}>
+        <div>
+          <h1 style={{margin:0,fontSize:24,fontWeight:800,color:C.text,letterSpacing:-0.4}}>Clientes</h1>
+          <p style={{color:C.muted,fontSize:13,margin:"4px 0 0"}}>Gestioná tus clientes y mirá el resumen de sus campañas</p>
+        </div>
+        <button onClick={()=>setEditing({})}
+          style={{background:C.impl,color:pickTextOn(C.impl),border:"none",borderRadius:10,padding:"10px 16px",fontFamily:f.b,fontSize:13,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
+          <Icon name="plus" size={14}/> Nuevo cliente
+        </button>
+      </div>
+
+      {clients.length===0 ? (
+        <div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"56px 24px",textAlign:"center"}}>
+          <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>Aún no hay clientes</div>
+          <p style={{margin:0,color:C.muted,fontSize:13}}>Creá tu primer cliente para empezar a asignarle campañas y ver sus métricas.</p>
+        </div>
+      ) : (
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+          {clients.map(c=>{
+            const camps=allCampaigns.filter(x=>x.client_id===c.id||x.client===c.name);
+            const active=camps.filter(x=>x.status==="activa").length;
+            return(
+              <div key={c.id} onClick={()=>{setSel(c);setView("detail");}}
+                style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 18px 16px",cursor:"pointer",transition:"border-color .15s, box-shadow .15s",display:"flex",flexDirection:"column",gap:14}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=C.impl;e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.06)";}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.boxShadow="none";}}>
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:48,height:48,borderRadius:10,background:c.logo_url?"transparent":C.surfaceHi,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
+                    {c.logo_url ? <img src={c.logo_url} alt={c.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+                      : <span style={{fontSize:16,fontWeight:800,color:C.muted}}>{(c.name||"?").slice(0,2).toUpperCase()}</span>}
+                  </div>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,color:C.text,letterSpacing:-0.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</div>
+                    {c.contact_name && <div style={{fontSize:11,color:C.muted,marginTop:2,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.contact_name}</div>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:999,fontSize:11,fontWeight:600,background:C.surfaceHi,color:C.text,border:`1px solid ${C.border}`}}>{camps.length} campaña{camps.length!==1?"s":""}</span>
+                  {active>0 && <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:999,fontSize:11,fontWeight:600,background:C.green+"15",color:C.green,border:`1px solid ${C.green}33`}}><span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>{active} activa{active!==1?"s":""}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {editing && <ClientForm initial={editing.id?editing:null} onSave={handleSaved} onCancel={()=>setEditing(null)}/>}
+    </div>
+  );
+};
+
 // ─── ADMIN APP ────────────────────────────────────────────────────────────────
 const AdminApp=({user,onLogout})=>{
   const [tab,setTab]         =useState("dash");
@@ -1701,6 +2013,7 @@ const AdminApp=({user,onLogout})=>{
   const [mecCamps,setMec]    =useState(INIT_MEC);
   const [reports,setReports] =useState(INIT_REPORTS);
   const [workers,setWorkers] =useState(INIT_WORKERS);
+  const [clients,setClients] =useState([]);
   const [view,setView]       =useState("list");
   const [selected,setSel]    =useState(null);
   const [newType,setNewType] =useState(null);
@@ -1708,15 +2021,16 @@ const AdminApp=({user,onLogout})=>{
 
   useEffect(()=>{
     const load=async()=>{
-      const [i,p,m,r,w]=await Promise.all([
+      const [i,p,m,r,w,cl]=await Promise.all([
         getCampaigns('impl'),getCampaigns('promo'),getCampaigns('mec'),
-        getReports(),getWorkers()
+        getReports(),getWorkers(),getClients()
       ]);
       if(i.data&&i.data.length) setImpl(i.data);
       if(p.data&&p.data.length) setPromo(p.data);
       if(m.data&&m.data.length) setMec(m.data);
       if(r.data&&r.data.length) setReports(r.data);
       if(w.data&&w.data.length) setWorkers(w.data.map(normalizeWorker));
+      if(cl.data) setClients(cl.data);
     };
     load();
   },[]);
@@ -1749,7 +2063,7 @@ const AdminApp=({user,onLogout})=>{
 
   // Campaign form screens
   if((view==="new"&&newType)||(view==="edit"&&selected))
-    return <CampaignForm type={newType||selected.type} initial={view==="edit"?selected:null} onSave={saveCampaign} onCancel={()=>{setView("list");setNewType(null);}} workers={workers}/>;
+    return <CampaignForm type={newType||selected.type} initial={view==="edit"?selected:null} onSave={saveCampaign} onCancel={()=>{setView("list");setNewType(null);}} workers={workers} clients={clients} onClientCreated={(c)=>setClients(prev=>[...prev,c])}/>;
 
   const NavBtn=({id,icon,label,badge})=>{
     const active=tab===id;
@@ -2144,10 +2458,14 @@ const AdminApp=({user,onLogout})=>{
         {/* WORKERS */}
         {tab==="workers"&&<WorkersTab workers={workers} setWorkers={setWorkers} allCampaigns={allCampaigns}/>}
 
+        {/* CLIENTES */}
+        {tab==="clients"&&<ClientsTab clients={clients} setClients={setClients} allCampaigns={allCampaigns} reports={reports}/>}
+
       </div>
 
       <div style={{position:"fixed",bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:"flex",padding:"6px 6px max(8px, env(safe-area-inset-bottom))",zIndex:10}}>
         <NavBtn id="dash"      icon="home"   label="Inicio"/>
+        {user.role==="admin"&&<NavBtn id="clients"   icon="star"   label="Clientes"/>}
         {user.role==="admin"&&<NavBtn id="campaigns" icon="target" label="Campañas"/>}
         <NavBtn id="approvals" icon="check"  label="Aprobar" badge={pendingCount}/>
         <NavBtn id="reports"   icon="chart"  label="Reportes"/>

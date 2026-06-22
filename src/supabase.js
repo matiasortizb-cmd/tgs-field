@@ -27,6 +27,20 @@ export const insertCampaign = (c) => supabase.from('campaigns').insert(c).select
 export const updateCampaign = (id, patch) => supabase.from('campaigns').update(patch).eq('id', id);
 export const deleteCampaign = (id) => supabase.from('campaigns').delete().eq('id', id);
 
+// CLIENTS
+export const getClients = () => supabase.from('clients').select('*').order('name');
+export const insertClient = (c) => supabase.from('clients').insert(c).select().single();
+export const updateClient = (id, patch) => supabase.from('clients').update(patch).eq('id', id);
+export const deleteClient = (id) => supabase.from('clients').delete().eq('id', id);
+export const uploadClientLogo = async (file, clientName) => {
+  const ext = file.name.split('.').pop();
+  const safe = clientName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  const path = `${safe}-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from('client-logos').upload(path, file, { upsert: true });
+  if (error) throw error;
+  return supabase.storage.from('client-logos').getPublicUrl(path).data.publicUrl;
+};
+
 // REPORTS
 export const getReports = (campaignId) => {
   let q = supabase.from('reports').select('*').order('created_at', { ascending: false });
