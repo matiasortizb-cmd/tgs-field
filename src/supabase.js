@@ -104,6 +104,7 @@ const toDbReport = (r) => {
   if (r.issues !== undefined) out.issues = r.issues;
   if (r.issueNote !== undefined) out.issue_note = r.issueNote;
   if (r.signed !== undefined) out.signed = r.signed;
+  if (r.signedPhoto !== undefined) out.signed_photo = r.signedPhoto;
   if (r.popOk !== undefined) out.pop_ok = r.popOk;
   if (r.popNote !== undefined) out.pop_note = r.popNote;
   if (r.obs !== undefined) out.obs = r.obs;
@@ -124,6 +125,7 @@ export const fromDbReport = (r) => r && {
   popOk: r.pop_ok,
   popNote: r.pop_note,
   checkedIn: r.checked_in,
+  signedPhoto: r.signed_photo,
   entryTime: r.entry_time,
   exitTime: r.exit_time,
   supervisorComment: r.supervisor_comment,

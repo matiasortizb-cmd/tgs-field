@@ -418,6 +418,13 @@ const ApprovalModal=({report,onClose,onApprove,onReject,onReview,onUpdateItems})
           </Card>
         )}
 
+        {report.signedPhoto && (
+          <Card style={{marginBottom:12}}>
+            <SL>Guía de despacho firmada</SL>
+            <img src={report.signedPhoto} alt="guía firmada" style={{width:"100%",borderRadius:10,cursor:"pointer",border:`1px solid ${C.border}`}} onClick={()=>window.open(report.signedPhoto,"_blank")}/>
+          </Card>
+        )}
+
         <Inp label="Comentario del supervisor" textarea placeholder="Escribe una observación, corrección o aprobación..." value={comment} onChange={e=>setComment(e.target.value)}/>
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:4}}>
@@ -3065,6 +3072,7 @@ const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
   const [form,setForm]=useState({store:sala?.name||"",issues:false,issueNote:"",signed:false});
   const [items,setItems]=useState(initialItems.length?initialItems:[{name:"",photo:null,note:""}]);
   const [photoGeneral,setPhotoGeneral]=useState(null);
+  const [signedPhoto,setSignedPhoto]=useState(null);
   const [geo,setGeo]=useState(null);const[gl,setGl]=useState(false);
   const [sending,setSending]=useState(false);
   const ts=nowStr();
@@ -3080,8 +3088,8 @@ const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
     await onSubmit({type:"impl",campaignId:campaign.id,user:user?.name,status:"pending",date:ts,
       store:form.store,qty:cleanItems.length,
       items:cleanItems,
-      issues:form.issues,issueNote:form.issueNote,signed:form.signed,
-      photos:{a:cleanItems[0]?.photo,b:photoGeneral},geo,
+      issues:form.issues,issueNote:form.issueNote,signed:form.signed,signedPhoto:form.signed?signedPhoto:null,
+      photos:{a:cleanItems[0]?.photo,b:photoGeneral,c:form.signed?signedPhoto:null},geo,
     });
     setSending(false);
   };
@@ -3158,8 +3166,15 @@ const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
               <div style={{fontSize:14,fontWeight:700,color:C.text,letterSpacing:-0.2}}>Firma del local</div>
               <div style={{fontSize:12,color:C.muted,marginTop:2,fontWeight:500}}>El encargado del local confirmó la instalación</div>
             </div>
-            <Toggle value={form.signed} onChange={v=>setForm({...form,signed:v})} color={C.green}/>
+            <Toggle value={form.signed} onChange={v=>{setForm({...form,signed:v});if(!v)setSignedPhoto(null);}} color={C.green}/>
           </div>
+          {form.signed && (
+            <div style={{marginTop:14,paddingTop:14,borderTop:`1px dashed ${C.border}`}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:8}}>Foto de la guía de despacho firmada</div>
+              <PhotoSlot label="Guía firmada" captured={signedPhoto} onCapture={url=>setSignedPhoto(url)}/>
+              {!signedPhoto && <div style={{fontSize:11,color:C.muted,marginTop:6,fontWeight:500}}>Subí una foto clara con la firma y el sello visibles.</div>}
+            </div>
+          )}
         </FormSection>
 
         <SubmitBtn disabled={!form.store||!canSubmit} loading={sending} onClick={handleSubmit} accent={C.impl}>
