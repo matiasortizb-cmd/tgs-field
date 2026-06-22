@@ -194,6 +194,34 @@ const RoleSwitcher=({user,onChangeRole})=>{
   );
 };
 
+// Banner explícito debajo del TopBar para que el cambio de rol sea visible en mobile
+const RoleSwitchBanner=({user,onChangeRole})=>{
+  const eligible=(user?.roles||[]).filter(r=>ROLE_META[r]);
+  if(eligible.length<2||!onChangeRole) return null;
+  const activeColor=ROLE_META[user.role]?.color||C.impl;
+  return (
+    <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",alignItems:"center",gap:10,position:"sticky",top:58,zIndex:19}}>
+      <span style={{fontSize:11,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",whiteSpace:"nowrap"}}>Ver como</span>
+      <div style={{flex:1,display:"flex",gap:6,overflowX:"auto",scrollbarWidth:"none"}}>
+        {eligible.map(r=>{
+          const meta=ROLE_META[r];
+          const active=user.role===r;
+          return (
+            <button key={r} onClick={()=>onChangeRole(r)}
+              style={{flexShrink:0,display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:999,border:`1px solid ${active?meta.color:C.border}`,background:active?meta.color+"15":"transparent",color:active?meta.color:C.text,fontFamily:f.b,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s",whiteSpace:"nowrap"}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:meta.color}}/>
+              {meta.label}
+            </button>
+          );
+        })}
+      </div>
+      <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:999,fontSize:10,fontWeight:700,background:activeColor+"15",color:activeColor,border:`1px solid ${activeColor}33`,whiteSpace:"nowrap"}}>
+        <span style={{width:5,height:5,borderRadius:"50%",background:activeColor}}/>activo
+      </span>
+    </div>
+  );
+};
+
 const TopBar=({title,sub,onBack,onLogout,actions})=>(
   <div style={{background:C.navBg,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:20,boxShadow:"0 1px 0 rgba(0,0,0,0.08)"}}>
     {onBack && (
@@ -2312,7 +2340,8 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
 
   return(
     <div style={{background:C.bg,minHeight:"100vh",fontFamily:f.b,color:C.text,display:"flex",flexDirection:"column"}}>
-      <TopBar title={user.role==="supervisor"?"TGS Field — Supervisor":"TGS Field — Admin"} sub={`Hola, ${user.name}`} onLogout={onLogout} actions={<RoleSwitcher user={user} onChangeRole={onChangeRole}/>}/>
+      <TopBar title={user.role==="supervisor"?"TGS Field — Supervisor":"TGS Field — Admin"} sub={`Hola, ${user.name}`} onLogout={onLogout}/>
+      <RoleSwitchBanner user={user} onChangeRole={onChangeRole}/>
 
       {/* Vertical switcher */}
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",gap:6}}>
@@ -2727,7 +2756,8 @@ const LandingScreen=({user,allCampaigns,onSelect,onLogout,onChangeRole})=>{
 
   return(
   <div style={{minHeight:"100vh",background:C.bg,fontFamily:f.b,color:C.text}}>
-    <TopBar title="TGS Field" sub={`Hola, ${user.name?.split(" ")[0]||""}`} onLogout={onLogout} actions={<RoleSwitcher user={user} onChangeRole={onChangeRole}/>}/>
+    <TopBar title="TGS Field" sub={`Hola, ${user.name?.split(" ")[0]||""}`} onLogout={onLogout}/>
+    <RoleSwitchBanner user={user} onChangeRole={onChangeRole}/>
     <div style={{padding:"24px 20px 40px",maxWidth:560,width:"100%",margin:"0 auto",boxSizing:"border-box"}}>
 
       <div onClick={()=>setShowProfile(s=>!s)}
