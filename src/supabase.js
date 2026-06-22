@@ -79,6 +79,61 @@ export const uploadClientLogo = async (file, clientName) => {
 };
 
 // REPORTS
+// Form usa camelCase y campos como user/date; la tabla usa snake_case y worker_name/created_at
+const toDbReport = (r) => {
+  const out = {};
+  if (r.type !== undefined) out.type = r.type;
+  if (r.status !== undefined) out.status = r.status;
+  if (r.campaignId !== undefined) out.campaign_id = r.campaignId;
+  if (r.user !== undefined) out.worker_name = r.user;
+  if (r.store !== undefined) out.store = r.store;
+  if (r.point !== undefined) out.point = r.point;
+  if (r.location !== undefined) out.location = r.location;
+  if (r.qty !== undefined) out.qty = r.qty;
+  if (r.contacts !== undefined) out.contacts = r.contacts;
+  if (r.samples !== undefined) out.samples = r.samples;
+  if (r.units !== undefined) out.units = r.units;
+  if (r.material !== undefined) out.material = r.material;
+  if (r.items !== undefined) out.items = r.items;
+  if (r.photos !== undefined) {
+    // El form pasa photos como objeto {a, b, c} o {installed, general, ...}; la tabla espera ARRAY
+    const flat = Array.isArray(r.photos) ? r.photos : Object.values(r.photos);
+    out.photos_urls = flat.filter(Boolean);
+  }
+  if (r.photos_urls !== undefined) out.photos_urls = r.photos_urls;
+  if (r.issues !== undefined) out.issues = r.issues;
+  if (r.issueNote !== undefined) out.issue_note = r.issueNote;
+  if (r.signed !== undefined) out.signed = r.signed;
+  if (r.popOk !== undefined) out.pop_ok = r.popOk;
+  if (r.popNote !== undefined) out.pop_note = r.popNote;
+  if (r.obs !== undefined) out.obs = r.obs;
+  if (r.checkedIn !== undefined) out.checked_in = r.checkedIn;
+  if (r.entryTime !== undefined) out.entry_time = r.entryTime;
+  if (r.exitTime !== undefined) out.exit_time = r.exitTime;
+  if (r.geo && (r.geo.lat || r.geo.lng)) { out.lat = r.geo.lat; out.lng = r.geo.lng; }
+  if (r.supervisorComment !== undefined) out.supervisor_comment = r.supervisorComment;
+  if (r.approvedBy !== undefined) out.approved_by = r.approvedBy;
+  return out;
+};
+export const fromDbReport = (r) => r && {
+  ...r,
+  campaignId: r.campaign_id,
+  user: r.worker_name,
+  date: r.created_at ? new Date(r.created_at).toLocaleString('es-CL') : '',
+  issueNote: r.issue_note,
+  popOk: r.pop_ok,
+  popNote: r.pop_note,
+  checkedIn: r.checked_in,
+  entryTime: r.entry_time,
+  exitTime: r.exit_time,
+  supervisorComment: r.supervisor_comment,
+  approvedBy: r.approved_by,
+  geo: (r.lat || r.lng) ? { lat: r.lat, lng: r.lng } : null,
+  items: r.items || [],
+  photos_urls: r.photos_urls || [],
+  // Mantener compat con código que lee r.photos como {a,b}
+  photos: r.photos_urls ? { a: r.photos_urls[0], b: r.photos_urls[1], c: r.photos_urls[2] } : {},
+};
 export const getReports = (campaignId) => {
   let q = supabase.from('reports').select('*').order('created_at', { ascending: false });
   if (campaignId) q = q.eq('campaign_id', campaignId);
@@ -86,11 +141,13 @@ export const getReports = (campaignId) => {
 };
 export const getMyReports = (workerName) =>
   supabase.from('reports').select('*').eq('worker_name', workerName).order('created_at', { ascending: false });
-export const insertReport = (r) => supabase.from('reports').insert(r).select().single();
+export const insertReport = (r) => supabase.from('reports').insert(toDbReport(r)).select().single();
 export const updateReportStatus = (id, status, comment) =>
   supabase.from('reports').update({ status, supervisor_comment: comment }).eq('id', id);
 export const updateReportApproval = (id, status, comment, supervisorName) =>
   supabase.from('reports').update({ status, supervisor_comment: comment, approved_by: supervisorName }).eq('id', id);
+export const updateReportItems = (id, items) =>
+  supabase.from('reports').update({ items }).eq('id', id);
 
 // BOLETAS
 export const getBoletas = (campaignId) => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, updateReportStatus, updateReportApproval, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo } from "./supabase";
+import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo } from "./supabase";
 import * as XLSX from "xlsx";
 import ClientReport from "./ClientReport";
 
@@ -284,9 +284,22 @@ const INIT_MEC = [
 ];
 
 // ─── APPROVAL MODAL ───────────────────────────────────────────────────────────
-const ApprovalModal=({report,onClose,onApprove,onReject,onReview})=>{
+const ApprovalModal=({report,onClose,onApprove,onReject,onReview,onUpdateItems})=>{
   const [comment,setComment]=useState(report.supervisorComment||"");
+  const [items,setItems]=useState(report.items||[]);
   const vt = VERTICALS[report.type];
+  const setItemStatus=(i,status)=>{
+    const next=items.map((it,j)=>j===i?{...it,status}:it);
+    setItems(next);
+    onUpdateItems&&onUpdateItems(report.id,next);
+  };
+  const setAllItems=(status)=>{
+    if(!items.length) return;
+    const next=items.map(it=>({...it,status}));
+    setItems(next);
+    onUpdateItems&&onUpdateItems(report.id,next);
+  };
+  const extraPhotos=(report.photos_urls||[]).filter(u=>!items.some(it=>it.photo===u));
   return(
     <div style={{position:"fixed",inset:0,background:"#000a",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
       <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto",padding:"24px 20px 40px"}}>
@@ -298,44 +311,81 @@ const ApprovalModal=({report,onClose,onApprove,onReject,onReview})=>{
           <button onClick={onClose} style={{background:"none",border:"none",color:C.muted,fontSize:22,cursor:"pointer"}}>×</button>
         </div>
 
-        {/* Reporte data */}
         <Card style={{marginBottom:12}}>
           <SL>Datos del reporte</SL>
           <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-            {report.qty!==undefined&&<Pill color={vt.color}>📦 {report.qty} materiales</Pill>}
-            {report.contacts&&<Pill color={vt.color}>🤝 {report.contacts} contactos</Pill>}
-            {report.units&&<Pill color={vt.color}>⚙️ {report.units} unidades</Pill>}
-            {report.signed&&<Pill color={C.green}>✓ Firmado</Pill>}
-            {report.popOk===false&&<Pill color={C.red}>⚠️ POP incompleto</Pill>}
-            {report.issues&&<Pill color={C.red}>⚠️ Con incidencia</Pill>}
+            {report.qty!==undefined&&<Pill color={vt.color}>{report.qty} {items.length?"elementos":"materiales"}</Pill>}
+            {report.contacts&&<Pill color={vt.color}>{report.contacts} contactos</Pill>}
+            {report.units&&<Pill color={vt.color}>{report.units} unidades</Pill>}
+            {report.signed&&<Pill color={C.green}>Firmado</Pill>}
+            {report.popOk===false&&<Pill color={C.red}>POP incompleto</Pill>}
+            {report.issues&&<Pill color={C.red}>Con incidencia</Pill>}
           </div>
           {(report.issueNote||report.popNote)&&(
             <div style={{background:C.red+"18",border:`1px solid ${C.red}33`,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.red,marginTop:10}}>
-              ⚠️ {report.issueNote||report.popNote}
+              {report.issueNote||report.popNote}
             </div>
           )}
         </Card>
 
-        {/* Fotos mock */}
-        <Card style={{marginBottom:12}}>
-          <SL>Fotografías adjuntas</SL>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            {[["Foto 1","#1a3a2a"],["Foto 2","#1a2a3a"]].map(([lbl,bg])=>(
-              <div key={lbl} style={{background:bg,borderRadius:10,aspectRatio:"4/3",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>📷</div>
-            ))}
-          </div>
-        </Card>
+        {items.length>0 && (
+          <Card style={{marginBottom:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
+              <SL>Elementos ({items.length})</SL>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>setAllItems("approved")} style={{background:"transparent",border:`1px solid ${C.green}55`,color:C.green,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:f.b}}>Aprobar todos</button>
+                <button onClick={()=>setAllItems("rejected")} style={{background:"transparent",border:`1px solid ${C.red}55`,color:C.red,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:f.b}}>Rechazar todos</button>
+              </div>
+            </div>
+            <div style={{display:"grid",gap:10}}>
+              {items.map((it,i)=>{
+                const st=it.status||"pending";
+                const stColor=st==="approved"?C.green:st==="rejected"?C.red:C.muted;
+                const stLabel=st==="approved"?"Aprobado":st==="rejected"?"Rechazado":"Pendiente";
+                return(
+                  <div key={i} style={{background:C.surfaceHi,border:`1px solid ${stColor}33`,borderRadius:10,padding:"10px 12px"}}>
+                    <div style={{display:"flex",gap:10}}>
+                      {it.photo && <img src={it.photo} alt={it.name} style={{width:64,height:64,objectFit:"cover",borderRadius:8,flexShrink:0,cursor:"pointer"}} onClick={()=>window.open(it.photo,"_blank")}/>}
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{fontSize:13,fontWeight:700,color:C.text,letterSpacing:-0.1}}>{it.name||`Elemento ${i+1}`}</div>
+                        {it.note && <div style={{fontSize:11,color:C.muted,marginTop:3,fontStyle:"italic"}}>"{it.note}"</div>}
+                        <span style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:6,padding:"2px 8px",borderRadius:999,fontSize:10,fontWeight:600,background:stColor+"15",color:stColor,border:`1px solid ${stColor}33`}}>
+                          <span style={{width:5,height:5,borderRadius:"50%",background:stColor}}/>{stLabel}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6,marginTop:8}}>
+                      <button onClick={()=>setItemStatus(i,"approved")} disabled={st==="approved"}
+                        style={{flex:1,background:st==="approved"?C.green+"18":"transparent",border:`1px solid ${st==="approved"?C.green:C.border}`,color:st==="approved"?C.green:C.text,borderRadius:8,padding:"6px",fontSize:11,fontWeight:600,cursor:st==="approved"?"default":"pointer",fontFamily:f.b}}>✓ Aprobar</button>
+                      <button onClick={()=>setItemStatus(i,"rejected")} disabled={st==="rejected"}
+                        style={{flex:1,background:st==="rejected"?C.red+"18":"transparent",border:`1px solid ${st==="rejected"?C.red:C.border}`,color:st==="rejected"?C.red:C.text,borderRadius:8,padding:"6px",fontSize:11,fontWeight:600,cursor:st==="rejected"?"default":"pointer",fontFamily:f.b}}>✗ Rechazar</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
 
-        {/* Comentario */}
+        {extraPhotos.length>0 && (
+          <Card style={{marginBottom:12}}>
+            <SL>{items.length?"Fotos adicionales":"Fotografías adjuntas"}</SL>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {extraPhotos.map((url,i)=>(
+                <img key={i} src={url} alt={`foto-${i}`} style={{width:"100%",aspectRatio:"4/3",objectFit:"cover",borderRadius:10,cursor:"pointer"}} onClick={()=>window.open(url,"_blank")}/>
+              ))}
+            </div>
+          </Card>
+        )}
+
         <Inp label="Comentario del supervisor" textarea placeholder="Escribe una observación, corrección o aprobación..." value={comment} onChange={e=>setComment(e.target.value)}/>
 
-        {/* Acciones */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:4}}>
-          <Btn variant="danger" full onClick={()=>onReject(report.id,comment)}>❌ Rechazar</Btn>
-          <Btn variant="success" full onClick={()=>onApprove(report.id,comment)}>✅ Aprobar</Btn>
+          <Btn variant="danger" full onClick={()=>onReject(report.id,comment)}>Rechazar reporte</Btn>
+          <Btn variant="success" full onClick={()=>onApprove(report.id,comment)}>Aprobar reporte</Btn>
         </div>
         <div style={{marginTop:10}}>
-          <Btn variant="ghost" full small onClick={()=>onReview(report.id,comment)}>🔍 Solicitar corrección</Btn>
+          <Btn variant="ghost" full small onClick={()=>onReview(report.id,comment)}>Solicitar corrección</Btn>
         </div>
       </div>
     </div>
@@ -622,13 +672,18 @@ const ApprovalTab=({reports,setReports,allCampaigns,vertical,user,filterStatus:f
   const approve=(id,comment)=>{ updateReport(id,{status:"approved",supervisorComment:comment,approvedBy:user.name}); setModal(null); };
   const reject =(id,comment)=>{ updateReport(id,{status:"rejected",supervisorComment:comment,approvedBy:user.name}); setModal(null); };
   const review =(id,comment)=>{ updateReport(id,{status:"review",  supervisorComment:comment,approvedBy:user.name}); setModal(null); };
+  const updateItems=async(id,nextItems)=>{
+    setReports(prev=>prev.map(r=>r.id===id?{...r,items:nextItems}:r));
+    setModal(m=>m&&m.id===id?{...m,items:nextItems}:m);
+    await updateReportItems(id,nextItems);
+  };
 
   const counts={pending:0,approved:0,rejected:0,review:0};
   relevant.forEach(r=>counts[r.status]=(counts[r.status]||0)+1);
 
   return(
     <div style={{paddingBottom:80}}>
-      {modal&&<ApprovalModal report={modal} onClose={()=>setModal(null)} onApprove={approve} onReject={reject} onReview={review}/>}
+      {modal&&<ApprovalModal report={modal} onClose={()=>setModal(null)} onApprove={approve} onReject={reject} onReview={review} onUpdateItems={updateItems}/>}
 
       <div style={{marginBottom:24}}>
         <h1 style={{margin:0,fontSize:24,fontWeight:800,color:C.text,letterSpacing:-0.4}}>Aprobaciones</h1>
@@ -2152,7 +2207,7 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
       if(i.data&&i.data.length) setImpl(i.data.map(fromDbCampaign));
       if(p.data&&p.data.length) setPromo(p.data.map(fromDbCampaign));
       if(m.data&&m.data.length) setMec(m.data.map(fromDbCampaign));
-      if(r.data&&r.data.length) setReports(r.data);
+      if(r.data&&r.data.length) setReports(r.data.map(fromDbReport));
       if(w.data&&w.data.length) setWorkers(w.data.map(normalizeWorker));
       if(cl.data) setClients(cl.data);
     };
@@ -2966,17 +3021,27 @@ const realGeo=(setGeo,setGl)=>{
 };
 
 const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
-  const [form,setForm]=useState({store:sala?.name||"",qty:"",issues:false,issueNote:"",signed:false});
-  const [photos,setPhotos]=useState({installed:null,general:null});
+  const initialItems=(campaign?.materials||[]).filter(m=>m && typeof m==="string" && m.trim()).map(name=>({name,photo:null,note:""}));
+  const [form,setForm]=useState({store:sala?.name||"",issues:false,issueNote:"",signed:false});
+  const [items,setItems]=useState(initialItems.length?initialItems:[{name:"",photo:null,note:""}]);
+  const [photoGeneral,setPhotoGeneral]=useState(null);
   const [geo,setGeo]=useState(null);const[gl,setGl]=useState(false);
   const [sending,setSending]=useState(false);
   const ts=nowStr();
   const getGeo=()=>realGeo(setGeo,setGl);
+  const editItem=(i,k,v)=>setItems(prev=>prev.map((it,j)=>j===i?{...it,[k]:v}:it));
+  const addItem=()=>setItems(prev=>[...prev,{name:"",photo:null,note:""}]);
+  const removeItem=(i)=>setItems(prev=>prev.filter((_,j)=>j!==i));
+  const itemsValid=items.filter(it=>it.name.trim()&&it.photo);
+  const canSubmit=itemsValid.length>0;
   const handleSubmit=async()=>{
     setSending(true);
+    const cleanItems=items.filter(it=>it.name.trim()&&it.photo).map(it=>({name:it.name.trim(),photo:it.photo,note:it.note||"",status:"pending"}));
     await onSubmit({type:"impl",campaignId:campaign.id,user:user?.name,status:"pending",date:ts,
-      store:form.store,qty:parseInt(form.qty)||0,issues:form.issues,issueNote:form.issueNote,signed:form.signed,
-      photos:{a:photos.installed,b:photos.general},geo,
+      store:form.store,qty:cleanItems.length,
+      items:cleanItems,
+      issues:form.issues,issueNote:form.issueNote,signed:form.signed,
+      photos:{a:cleanItems[0]?.photo,b:photoGeneral},geo,
     });
     setSending(false);
   };
@@ -3015,15 +3080,31 @@ const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
           )}
         </FormSection>
 
-        <FormSection title="Fotografías" desc="Material instalado y vista del punto de venta">
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <PhotoSlot label="Material instalado" captured={photos.installed} onCapture={url=>setPhotos({...photos,installed:url})}/>
-            <PhotoSlot label="Vista del PdV"      captured={photos.general}   onCapture={url=>setPhotos({...photos,general:url})}/>
+        <FormSection title="Elementos instalados" desc="Agregá un item por cada elemento POP. Cada uno con su foto.">
+          <div style={{display:"grid",gap:12}}>
+            {items.map((it,i)=>(
+              <div key={i} style={{background:C.surfaceHi,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
+                  <span style={{fontSize:10,fontWeight:700,letterSpacing:0.5,color:C.muted,textTransform:"uppercase"}}>Elemento {i+1}</span>
+                  {items.length>1 && (
+                    <button type="button" onClick={()=>removeItem(i)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",padding:4,display:"inline-flex"}} title="Quitar">
+                      <Icon name="x" size={14}/>
+                    </button>
+                  )}
+                </div>
+                <input value={it.name} onChange={e=>editItem(i,"name",e.target.value)} placeholder="Nombre del elemento (ej: Cooler exhibidor)"
+                  style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 11px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:8}}/>
+                <PhotoSlot label={it.name||"Foto del elemento"} captured={it.photo} onCapture={url=>editItem(i,"photo",url)}/>
+                <textarea value={it.note} onChange={e=>editItem(i,"note",e.target.value)} placeholder="Nota (opcional)"
+                  style={{width:"100%",minHeight:48,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 11px",color:C.text,fontFamily:f.b,fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",marginTop:8}}/>
+              </div>
+            ))}
           </div>
+          <button type="button" onClick={addItem} style={{width:"100%",marginTop:10,background:"transparent",border:`1px dashed ${C.border}`,color:C.muted,borderRadius:10,padding:"10px",fontFamily:f.b,fontSize:13,fontWeight:600,cursor:"pointer"}}>+ Agregar otro elemento</button>
         </FormSection>
 
-        <FormSection title="Materiales instalados" desc="Cantidad total instalada en este punto">
-          <BigNumberInput value={form.qty} onChange={e=>setForm({...form,qty:e.target.value})} width="50%"/>
+        <FormSection title="Vista general del punto" desc="Una foto opcional del PdV completo">
+          <PhotoSlot label="Vista del PdV" captured={photoGeneral} onCapture={url=>setPhotoGeneral(url)}/>
         </FormSection>
 
         <ToggleRow label="¿Hubo incidencias?" desc="Problemas a reportar" value={form.issues} onChange={v=>setForm({...form,issues:v})} color={C.red}>
@@ -3041,8 +3122,8 @@ const ImplForm=({campaign,sala,onSubmit,onBack,user})=>{
           </div>
         </FormSection>
 
-        <SubmitBtn disabled={!form.store||!form.qty} loading={sending} onClick={handleSubmit} accent={C.impl}>
-          Enviar reporte
+        <SubmitBtn disabled={!form.store||!canSubmit} loading={sending} onClick={handleSubmit} accent={C.impl}>
+          Enviar reporte ({itemsValid.length} elemento{itemsValid.length!==1?"s":""})
         </SubmitBtn>
       </div>
     </div>
