@@ -72,6 +72,14 @@ export const uploadPhoto = async (file, reportId) => {
   if (error) throw error;
   return supabase.storage.from('photos').getPublicUrl(path).data.publicUrl;
 };
+export const uploadAvatar = async (file, label) => {
+  const ext = file.name.split('.').pop();
+  const safe = (label || 'avatar').toLowerCase().replace(/[^a-z0-9]/g, '-');
+  const path = `${safe}-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
+  if (error) throw error;
+  return supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+};
 export const uploadBoleta = async (file, workerId, campaignId) => {
   const ext = file.name.split('.').pop();
   const path = `${campaignId}/${workerId}/${Date.now()}.${ext}`;

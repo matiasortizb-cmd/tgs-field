@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, updateReportStatus, updateReportApproval, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo } from "./supabase";
+import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, updateReportStatus, updateReportApproval, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo } from "./supabase";
 import * as XLSX from "xlsx";
 import ClientReport from "./ClientReport";
 
@@ -1191,6 +1191,22 @@ const WorkerRegisterScreen=({onSuccess,onBack})=>{
   const toggleRole=(r)=>setF("roles",form.roles.includes(r)?form.roles.filter(x=>x!==r):[...form.roles,r]);
   const [submitting,setSubmitting]=useState(false);
   const [submitErr,setSubmitErr]=useState("");
+  const [photoUploading,setPhotoUploading]=useState(false);
+  const [photoErr,setPhotoErr]=useState("");
+  const photoInputRef=useRef(null);
+
+  const handlePhotoFile=async(e)=>{
+    const file=e.target.files?.[0];
+    e.target.value="";
+    if(!file) return;
+    setPhotoErr("");setPhotoUploading(true);
+    try{
+      const label=form.email||form.name||"perfil";
+      const url=await uploadAvatar(file,label);
+      setF("photo",url);
+    }catch(ex){ setPhotoErr("No se pudo subir la foto: "+(ex.message||ex)); }
+    setPhotoUploading(false);
+  };
 
   const handleSubmit=async()=>{
     setSubmitting(true);setSubmitErr("");
@@ -1290,18 +1306,22 @@ const WorkerRegisterScreen=({onSuccess,onBack})=>{
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"20px 22px",marginBottom:18}}>
             <div style={{fontSize:14,fontWeight:700,color:C.text,letterSpacing:-0.2,marginBottom:4}}>Foto de perfil</div>
             <div style={{fontSize:12,color:C.muted,marginBottom:14,fontWeight:500}}>Opcional, ayuda a que te reconozcan en el panel</div>
+            <input ref={photoInputRef} type="file" accept="image/*" capture="user" style={{display:"none"}} onChange={handlePhotoFile}/>
             <div style={{display:"flex",alignItems:"center",gap:14}}>
-              <div style={{width:64,height:64,borderRadius:"50%",background:form.photo?C.green+"15":C.surfaceHi,border:`1.5px dashed ${form.photo?C.green:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:form.photo?C.green:C.muted}}>
-                {form.photo
-                  ?<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                  :<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>
+              <div style={{width:64,height:64,borderRadius:"50%",background:form.photo?"transparent":C.surfaceHi,border:`1.5px dashed ${form.photo?C.green:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:form.photo?C.green:C.muted,overflow:"hidden",flexShrink:0}}>
+                {photoUploading
+                  ?<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                  :form.photo
+                    ?<img src={form.photo} alt="Foto de perfil" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    :<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>
                 }
               </div>
-              <button onClick={()=>setF("photo","uploaded")}
-                style={{background:"transparent",border:`1px solid ${C.border}`,color:C.text,borderRadius:10,padding:"9px 14px",fontFamily:f.b,fontSize:13,fontWeight:600,cursor:"pointer"}}>
-                {form.photo?"Cambiar foto":"Subir foto"}
+              <button onClick={()=>photoInputRef.current?.click()} disabled={photoUploading}
+                style={{background:"transparent",border:`1px solid ${C.border}`,color:C.text,borderRadius:10,padding:"9px 14px",fontFamily:f.b,fontSize:13,fontWeight:600,cursor:photoUploading?"default":"pointer",opacity:photoUploading?0.6:1}}>
+                {photoUploading?"Subiendo…":form.photo?"Cambiar foto":"Subir foto"}
               </button>
             </div>
+            {photoErr && <div style={{marginTop:10,padding:"8px 12px",background:C.red+"15",border:`1px solid ${C.red}33`,borderRadius:8,color:C.red,fontSize:12,fontWeight:500}}>{photoErr}</div>}
           </div>
 
           <button disabled={!form.name||!form.rut||!form.phone||!form.email||!form.password||form.password.length<6||form.password!==form.confirmPass||!form.region}
