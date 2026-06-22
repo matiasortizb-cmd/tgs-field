@@ -794,6 +794,30 @@ const CampaignMapView=({workers,salas})=>{
   );
 };
 
+// ─── CAMPAIGN FORM helpers (a nivel módulo para no perder el foco de inputs al re-render) ──
+// FormSection ya está definido más abajo (shared con los forms de reporte); lo reusamos acá.
+const FormPersonRow=({person,active,onClick,activeColor})=>{
+  const rc=ROLE_META[(person.roles||[])[0]]?.color||activeColor||C.muted;
+  return (
+    <div onClick={onClick}
+      style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,background:active?activeColor+"10":"transparent",border:`1px solid ${active?activeColor:C.border}`,marginBottom:6,cursor:"pointer",transition:"all .15s"}}>
+      <div style={{width:32,height:32,borderRadius:"50%",background:rc,color:pickTextOn(rc),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{person.photo||(person.name||"").split(" ").map(n=>n[0]).filter(Boolean).slice(0,2).join("").toUpperCase()||"?"}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontWeight:600,fontSize:13,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{person.name}</div>
+        {(person.comuna||person.region) && (
+          <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:C.muted,fontWeight:500,marginTop:2}}>
+            <Icon name="pin" size={11}/>
+            {person.comuna||"—"}{person.region?` · ${(person.region||"").split("—")[0].trim()}`:""}
+          </div>
+        )}
+      </div>
+      <div style={{width:20,height:20,borderRadius:"50%",border:`1.5px solid ${active?activeColor:C.border}`,background:active?activeColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        {active && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={pickTextOn(activeColor)} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg>}
+      </div>
+    </div>
+  );
+};
+
 // ─── CAMPAIGN FORM ────────────────────────────────────────────────────────────
 const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbClients,onClientCreated})=>{
   const vt=VERTICALS[type];
@@ -873,37 +897,13 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
   const clientsList=dbClients||[];
   const selectedClient=clientsList.find(c=>c.id===form.client_id)||clientsList.find(c=>c.name===form.client);
 
-  // Helpers visuales locales del form
+  // Helper local que solo retorna JSX inline (no es componente, no causa re-mount)
   const sectionTitle=(label,desc)=>(
     <div style={{marginBottom:14}}>
       <div style={{fontSize:14,fontWeight:700,color:C.text,letterSpacing:-0.2}}>{label}</div>
       {desc && <div style={{fontSize:12,color:C.muted,marginTop:2,fontWeight:500}}>{desc}</div>}
     </div>
   );
-  const Section=({children,style})=>(
-    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"20px 22px",marginBottom:14,...(style||{})}}>{children}</div>
-  );
-  const PersonRow=({person,active,onClick,activeColor})=>{
-    const rc=ROLE_META[(person.roles||[])[0]]?.color||activeColor||C.muted;
-    return (
-      <div onClick={onClick}
-        style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,background:active?activeColor+"10":"transparent",border:`1px solid ${active?activeColor:C.border}`,marginBottom:6,cursor:"pointer",transition:"all .15s"}}>
-        <div style={{width:32,height:32,borderRadius:"50%",background:rc,color:pickTextOn(rc),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{person.photo||(person.name||"").split(" ").map(n=>n[0]).filter(Boolean).slice(0,2).join("").toUpperCase()||"?"}</div>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontWeight:600,fontSize:13,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{person.name}</div>
-          {(person.comuna||person.region) && (
-            <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:C.muted,fontWeight:500,marginTop:2}}>
-              <Icon name="pin" size={11}/>
-              {person.comuna||"—"}{person.region?` · ${(person.region||"").split("—")[0].trim()}`:""}
-            </div>
-          )}
-        </div>
-        <div style={{width:20,height:20,borderRadius:"50%",border:`1.5px solid ${active?activeColor:C.border}`,background:active?activeColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-          {active && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={pickTextOn(activeColor)} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg>}
-        </div>
-      </div>
-    );
-  };
   const teamLabel=type==="impl"?"Implementadores":type==="promo"?"Promotores":"Mecanizadores";
 
   return(
@@ -918,7 +918,7 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
             </span>
           </div>
 
-          <Section>
+          <FormSection>
             {sectionTitle("Datos del cliente","Información general de la campaña")}
             <div style={{marginBottom:12}}>
               <label style={{fontSize:11,fontWeight:700,letterSpacing:0.4,color:C.muted,textTransform:"uppercase",marginBottom:6,display:"block"}}>Cliente *</label>
@@ -966,9 +966,9 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
               <Inp label="Total de unidades" type="number" placeholder="1000" value={form.totalUnits} onChange={e=>setF("totalUnits",e.target.value)}/>
             </>}
             <Inp label="Estado" selectOptions={["activa","pausada","completada"]} value={form.status} onChange={e=>setF("status",e.target.value)}/>
-          </Section>
+          </FormSection>
 
-          <Section>
+          <FormSection>
             {sectionTitle("Configuración de pago","Modalidad y monto que recibirán los workers")}
             <Inp label="Modalidad" selectOptions={PAY_MODES} value={form.payMode} onChange={e=>setF("payMode",e.target.value)}/>
             <Inp label={`Monto en CLP — ${form.payMode==="Por visita/punto"?"por punto":form.payMode==="Por día trabajado"?"por día":form.payMode==="Tarifa fija por material"?"por unidad":"total campaña"}`}
@@ -981,9 +981,9 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
                  <>Monto único por campaña: <span style={{fontWeight:700,color:C.text}}>{fmt$(form.payAmount)}</span></>}
               </div>
             )}
-          </Section>
+          </FormSection>
 
-          <Section>
+          <FormSection>
             {sectionTitle(teamLabel,`Workers que ejecutan en terreno · ${fallbackPeople.length} disponible${fallbackPeople.length!==1?"s":""}`)}
             {form.team.length>0&&(
               <div style={{background:vt.color+"10",border:`1px solid ${vt.color}33`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:C.text,fontWeight:500}}>
@@ -993,11 +993,11 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
             {fallbackPeople.length===0 ? (
               <div style={{padding:"20px 16px",textAlign:"center",color:C.muted,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:10}}>No hay {teamLabel.toLowerCase()} disponibles.</div>
             ) : fallbackPeople.map(p=>(
-              <PersonRow key={p.id} person={p} active={form.team.includes(p.name)} onClick={()=>toggleTeam(p.name)} activeColor={vt.color}/>
+              <FormPersonRow key={p.id} person={p} active={form.team.includes(p.name)} onClick={()=>toggleTeam(p.name)} activeColor={vt.color}/>
             ))}
-          </Section>
+          </FormSection>
 
-          <Section>
+          <FormSection>
             {sectionTitle("Supervisores","Pueden supervisar múltiples puntos")}
             {form.supervisors.length>0&&(
               <div style={{background:C.blue+"10",border:`1px solid ${C.blue}33`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:C.text,fontWeight:500}}>
@@ -1007,7 +1007,7 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
             {supervisorPeople.length===0 ? (
               <div style={{padding:"20px 16px",textAlign:"center",color:C.muted,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:10}}>No hay supervisores registrados.</div>
             ) : supervisorPeople.map(p=>(
-              <PersonRow key={p.id} person={p} active={form.supervisors.includes(p.name)} onClick={()=>toggleSupervisor(p.name)} activeColor={C.blue}/>
+              <FormPersonRow key={p.id} person={p} active={form.supervisors.includes(p.name)} onClick={()=>toggleSupervisor(p.name)} activeColor={C.blue}/>
             ))}
             {form.supervisors.length>0&&hasSalas&&form.salas.filter(s=>s.name.trim()).length>0&&(
               <div style={{marginTop:14,borderTop:`1px solid ${C.border}`,paddingTop:14}}>
@@ -1041,10 +1041,10 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
                 })}
               </div>
             )}
-          </Section>
+          </FormSection>
 
           {hasSalas&&(
-            <Section>
+            <FormSection>
               {sectionTitle(type==="impl"?"Salas / Puntos de venta":"Puntos de activación","Cargá manualmente o desde un Excel")}
 
               <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
@@ -1090,11 +1090,11 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
                 ))}
               </div>
               <button onClick={addSala} style={{width:"100%",marginTop:10,background:"transparent",border:`1px dashed ${C.border}`,color:C.muted,borderRadius:10,padding:"10px",fontFamily:f.b,fontSize:13,fontWeight:600,cursor:"pointer"}}>+ Agregar sala manualmente</button>
-            </Section>
+            </FormSection>
           )}
 
           {type==="impl"&&(
-            <Section>
+            <FormSection>
               {sectionTitle("Materiales POP esperados","Listá los materiales que se instalarán en cada punto")}
               <div style={{display:"grid",gap:8,marginBottom:8}}>
                 {form.materials.map((m,i)=>(
@@ -1111,16 +1111,16 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
                 ))}
               </div>
               <button onClick={()=>addItem("materials")} style={{width:"100%",background:"transparent",border:`1px dashed ${C.border}`,color:C.muted,borderRadius:10,padding:"10px",fontFamily:f.b,fontSize:13,fontWeight:600,cursor:"pointer"}}>+ Agregar material</button>
-            </Section>
+            </FormSection>
           )}
           {type==="promo"&&(
-            <Section>
+            <FormSection>
               {sectionTitle("Metas","Objetivos de la activación")}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <Inp label="Meta contactos" type="number" placeholder="500" value={form.targetContacts} onChange={e=>setF("targetContacts",e.target.value)}/>
                 <Inp label="Meta muestras"  type="number" placeholder="300" value={form.targetSamples}  onChange={e=>setF("targetSamples",e.target.value)}/>
               </div>
-            </Section>
+            </FormSection>
           )}
 
           <div style={{background:C.surface,border:`1px solid ${vt.color}55`,borderRadius:14,padding:"20px 22px",marginBottom:18,position:"relative",overflow:"hidden"}}>
