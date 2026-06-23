@@ -1725,14 +1725,32 @@ const WorkersTab=({workers,setWorkers,allCampaigns})=>{
   const [selected,setSel]      =useState(null);
   const [filterRole,setRole]   =useState("all");
   const [filterStatus,setSt]   =useState("all");
+  const [filterRegion,setRegion]=useState("all");
+  const [filterComuna,setComuna]=useState("all");
+  const [sortBy,setSortBy]     =useState("rating"); // rating | name | jobs
   const [search,setSearch]     =useState("");
   const [finderRole,setFinderRole]=useState("all");
+
+  // Región: lista canónica de Chile (siempre completa, no depende de que los workers la tengan cargada).
+  // Comuna: acotada a la región elegida con la lista canónica; si no hay región, se derivan de los datos.
+  const regionOptions=REGIONS_CL;
+  const comunaOptions=filterRegion!=="all"
+    ? (COMUNAS_POR_REGION[filterRegion]||[])
+    : [...new Set(workers.map(w=>w.comuna).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
 
   const filtered=workers.filter(w=>{
     const roleOk=filterRole==="all"||(w.roles||[]).includes(filterRole);
     const stOk=filterStatus==="all"||w.status===filterStatus;
-    const srchOk=!search||((w.name||"").toLowerCase().includes(search.toLowerCase())||(w.rut||"").includes(search)||(w.comuna||"").toLowerCase().includes(search.toLowerCase()));
-    return roleOk&&stOk&&srchOk;
+    const regOk=filterRegion==="all"||w.region===filterRegion;
+    const comOk=filterComuna==="all"||w.comuna===filterComuna;
+    const q=search.toLowerCase();
+    const srchOk=!search||((w.name||"").toLowerCase().includes(q)||(w.rut||"").includes(search)||(w.comuna||"").toLowerCase().includes(q)||(w.region||"").toLowerCase().includes(q));
+    return roleOk&&stOk&&regOk&&comOk&&srchOk;
+  }).sort((a,b)=>{
+    const byName=(a.name||"").localeCompare(b.name||"","es");
+    if(sortBy==="name") return byName;
+    if(sortBy==="jobs") return (b.jobs||0)-(a.jobs||0)||byName;
+    return (b.rating||0)-(a.rating||0)||byName; // rating (default)
   });
 
   const approveWorker=async(id)=>{ setWorkers(prev=>prev.map(w=>w.id===id?{...w,status:"activo"}:w)); await updateWorker(id,{status:"activo"}); };
@@ -1941,10 +1959,38 @@ const WorkersTab=({workers,setWorkers,allCampaigns})=>{
 
       <div style={{position:"relative",marginBottom:14}}>
         <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:C.muted,pointerEvents:"none",display:"inline-flex"}}><Icon name="search" size={16}/></span>
-        <input placeholder="Buscar por nombre, RUT o comuna" value={search} onChange={e=>setSearch(e.target.value)}
+        <input placeholder="Buscar por nombre, RUT, comuna o región" value={search} onChange={e=>setSearch(e.target.value)}
           style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px 10px 38px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",boxSizing:"border-box"}}
           onFocus={e=>{e.target.style.borderColor=C.impl;e.target.style.boxShadow=`0 0 0 3px ${C.impl}22`;}}
           onBlur={e=>{e.target.style.borderColor=C.border;e.target.style.boxShadow="none";}}/>
+      </div>
+
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+        <div style={{flex:"1 1 180px",minWidth:150}}>
+          <label style={{fontSize:10,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:5,display:"block"}}>Región</label>
+          <select value={filterRegion} onChange={e=>{setRegion(e.target.value);setComuna("all");}}
+            style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 12px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+            <option value="all">Todas las regiones</option>
+            {regionOptions.map(r=><option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+        <div style={{flex:"1 1 180px",minWidth:150}}>
+          <label style={{fontSize:10,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:5,display:"block"}}>Ciudad / Comuna</label>
+          <select value={filterComuna} onChange={e=>setComuna(e.target.value)}
+            style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 12px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+            <option value="all">Todas las comunas</option>
+            {comunaOptions.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{flex:"1 1 180px",minWidth:150}}>
+          <label style={{fontSize:10,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:5,display:"block"}}>Ordenar por</label>
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
+            style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 12px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+            <option value="rating">Mejor rating</option>
+            <option value="jobs">Más trabajos</option>
+            <option value="name">Nombre (A-Z)</option>
+          </select>
+        </div>
       </div>
 
       <div style={{display:"flex",gap:6,marginBottom:8,overflowX:"auto",paddingBottom:2}}>
@@ -1971,6 +2017,14 @@ const WorkersTab=({workers,setWorkers,allCampaigns})=>{
           );
         })}
       </div>
+
+      {(()=>{const anyFilter=search||filterRole!=="all"||filterStatus!=="all"||filterRegion!=="all"||filterComuna!=="all";return anyFilter?(
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:10,flexWrap:"wrap"}}>
+          <span style={{fontSize:12,color:C.muted,fontWeight:600}}>{filtered.length} resultado{filtered.length!==1?"s":""}</span>
+          <button onClick={()=>{setSearch("");setRole("all");setSt("all");setRegion("all");setComuna("all");}}
+            style={{background:"transparent",border:"none",color:C.impl,fontFamily:f.b,fontSize:12,fontWeight:600,cursor:"pointer",padding:0}}>Limpiar filtros</button>
+        </div>
+      ):null;})()}
 
       {filtered.length===0 ? (
         <div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"40px 20px",textAlign:"center",color:C.muted,fontSize:13}}>Sin resultados.</div>
