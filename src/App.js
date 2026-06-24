@@ -2617,7 +2617,7 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
   const deleteCampaign=(id)=>{ setCamps(prev=>prev.filter(x=>x.id!==id)); setView("list");setSel(null); };
 
   // Client report
-  if(reportCamp) return <ClientReport campaign={reportCamp} reports={reports} workers={workers} onClose={()=>setReportCamp(null)}/>;
+  if(reportCamp) return <ClientReport campaign={reportCamp} reports={reports} workers={workers} clients={clients} onClose={()=>setReportCamp(null)}/>;
 
   // Calificación de equipo al cerrar campaña
   if(ratingCamp){
