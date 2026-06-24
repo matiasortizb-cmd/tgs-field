@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, updateReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo, getCampaignRatings, upsertWorkerRating, recalcWorkerRating } from "./supabase";
+import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, updateReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo, getCampaignRatings, upsertWorkerRating, recalcWorkerRating, getAllWorkerRatings } from "./supabase";
 import * as XLSX from "xlsx";
 import ClientReport from "./ClientReport";
 
@@ -1739,7 +1739,7 @@ const WorkerMap=({workers,onSelectWorker,allCampaigns,fullHeight})=>{
   );
 };
 
-const WorkersTab=({workers,setWorkers,allCampaigns})=>{
+const WorkersTab=({workers,setWorkers,allCampaigns,ratings=[]})=>{
   const [view,setView]         =useState("list"); // list | detail | finder
   const [selected,setSel]      =useState(null);
   const [filterRole,setRole]   =useState("all");
@@ -1927,6 +1927,46 @@ const WorkersTab=({workers,setWorkers,allCampaigns})=>{
             </div>
           </div>
         )}
+
+        {(()=>{
+          const mine=ratings.filter(r=>r.worker_id===selected.id);
+          return(
+            <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:mine.length?12:0}}>
+                <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:C.muted,textTransform:"uppercase"}}>Calificaciones</div>
+                <span style={{fontSize:12,color:C.muted,fontWeight:600}}>{mine.length} campaña{mine.length!==1?"s":""}</span>
+              </div>
+              {mine.length===0 ? (
+                <div style={{fontSize:13,color:C.muted,paddingTop:10}}>Todavía no tiene calificaciones de campañas.</div>
+              ) : (
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  {mine.map(r=>(
+                    <div key={r.id} style={{borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:8}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.campaign_name||"Campaña"}</div>
+                          <div style={{fontSize:11,color:C.muted,fontWeight:500,marginTop:2}}>{r.created_at?new Date(r.created_at).toLocaleDateString("es-CL"):""}{r.rated_by?` · por ${r.rated_by}`:""}</div>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                          <Stars value={Math.round(r.score||0)} size={15} readOnly/>
+                          <span style={{fontSize:13,fontWeight:700,color:C.impl}}>{r.score}</span>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:r.notes?8:0}}>
+                        {RATING_CRITERIA.filter(crit=>(r.scores||{})[crit.key]).map(crit=>(
+                          <span key={crit.key} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:999,fontSize:10,fontWeight:600,background:C.surfaceHi,color:C.muted,border:`1px solid ${C.border}`}}>
+                            {crit.label} <span style={{color:C.impl,fontWeight:700}}>{r.scores[crit.key]}</span>
+                          </span>
+                        ))}
+                      </div>
+                      {r.notes && <div style={{fontSize:12,color:C.text,fontStyle:"italic",background:C.bg,borderRadius:8,padding:"8px 10px"}}>“{r.notes}”</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {selected.status==="pendiente" && (
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:8}}>
@@ -2512,6 +2552,7 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
   const [newType,setNewType] =useState(null);
   const [reportCamp,setReportCamp]=useState(null);
   const [ratingCamp,setRatingCamp]=useState(null);
+  const [ratings,setRatings]=useState([]);
   const [approvalStatus,setApprovalStatus]=useState("pending");
   const [campaignStatusFilter,setCampaignStatusFilter]=useState(null);
 
@@ -2524,9 +2565,9 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
 
   useEffect(()=>{
     const load=async()=>{
-      const [i,p,m,r,w,cl]=await Promise.all([
+      const [i,p,m,r,w,cl,rt]=await Promise.all([
         getCampaigns('impl'),getCampaigns('promo'),getCampaigns('mec'),
-        getReports(),getWorkers(),getClients()
+        getReports(),getWorkers(),getClients(),getAllWorkerRatings()
       ]);
       if(i.data&&i.data.length) setImpl(i.data.map(fromDbCampaign));
       if(p.data&&p.data.length) setPromo(p.data.map(fromDbCampaign));
@@ -2534,16 +2575,30 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
       if(r.data&&r.data.length) setReports(r.data.map(fromDbReport));
       if(w.data&&w.data.length) setWorkers(w.data.map(normalizeWorker));
       if(cl.data) setClients(cl.data);
+      if(rt&&rt.data) setRatings(rt.data);
     };
     load();
   },[]);
 
+  const reloadRatings=async()=>{ const {data}=await getAllWorkerRatings(); setRatings(data||[]); };
+
   const vt=VERTICALS[vertical];
   const campaigns=vertical==="impl"?implCamps:vertical==="promo"?promoCamps:mecCamps;
+  // El admin ve todas las campañas de la vertical; el supervisor sólo las que supervisa.
+  const visibleCamps=user.role==="admin"?campaigns:campaigns.filter(c=>(c.supervisors||[]).includes(user.name));
   const setCamps=vertical==="impl"?setImpl:vertical==="promo"?setPromo:setMec;
   const allCampaigns=[...implCamps,...promoCamps,...mecCamps];
   const pendingCount=reports.filter(r=>r.status==="pending").length;
   const pendingWorkerCount=workers.filter(w=>w.status==="pendiente").length;
+  // Helpers de calificación por campaña
+  const peopleOf=(c)=>[...new Set([...(c.team||[]),...(c.supervisors||[])])];
+  const ratedNamesFor=(cid)=>new Set(ratings.filter(r=>r.campaign_id===cid).map(r=>r.worker_name));
+  const ratingPending=(c)=>{ // null si no aplica; nº de personas sin calificar si está completada
+    if(c.status!=="completada") return null;
+    const ppl=peopleOf(c); if(!ppl.length) return null;
+    const rated=ratedNamesFor(c.id);
+    return ppl.filter(n=>!rated.has(n)).length;
+  };
 
   const saveCampaign=async(c)=>{
     const setTarget=c.type==="impl"?setImpl:c.type==="promo"?setPromo:setMec;
@@ -2572,6 +2627,7 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
       onClose={()=>setRatingCamp(null)}
       onSaved={(updated)=>{
         setWorkers(prev=>prev.map(w=>updated[w.id]!=null?{...w,rating:updated[w.id]}:w));
+        reloadRatings();
         setRatingCamp(null);
       }}/>;
   }
@@ -2734,12 +2790,12 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:24,gap:12,flexWrap:"wrap"}}>
             <div>
               <h1 style={{margin:0,fontSize:24,fontWeight:800,color:C.text,letterSpacing:-0.4}}>Campañas</h1>
-              <p style={{color:C.muted,fontSize:13,margin:"2px 0 0"}}>{campaigns.length} en total · {vt.label}</p>
+              <p style={{color:C.muted,fontSize:13,margin:"2px 0 0"}}>{visibleCamps.length} en total · {vt.label}</p>
             </div>
-            <Btn accent={vt.color} small onClick={()=>setView("pickType")}>+ Nueva campaña</Btn>
+            {user.role==="admin"&&<Btn accent={vt.color} small onClick={()=>setView("pickType")}>+ Nueva campaña</Btn>}
           </div>
           {["activa","pausada","completada"].map(status=>{
-            const group=campaigns.filter(c=>c.status===status);
+            const group=visibleCamps.filter(c=>c.status===status);
             if(!group.length)return null;
             const sc={activa:C.green,pausada:C.orange,completada:C.muted}[status];
             const sLabel={activa:"Activas",pausada:"Pausadas",completada:"Completadas"}[status];
@@ -2754,6 +2810,7 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
                   {group.map(c=>{
                     const total=c.stores||c.points||c.totalUnits||1; const p=pct(c.done,total);
                     const done=p===100;
+                    const pend=ratingPending(c);
                     return(
                       <div key={c.id} onClick={()=>{setSel(c);setView("detail");}}
                         style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",cursor:"pointer",transition:"border-color .15s, box-shadow .15s"}}
@@ -2778,6 +2835,13 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
                           <span>·</span>
                           <span>{c.dateStart} → {c.dateEnd}</span>
                         </div>
+                        {pend!==null && (
+                          <div style={{marginTop:10}}>
+                            <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 10px",borderRadius:999,fontSize:11,fontWeight:600,background:(pend>0?C.orange:C.green)+"15",color:pend>0?C.orange:C.green,border:`1px solid ${(pend>0?C.orange:C.green)}33`}}>
+                              <Icon name="star" size={11}/>{pend>0?`Falta calificar a ${pend}`:"Equipo calificado"}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2785,11 +2849,11 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
               </div>
             );
           })}
-          {campaigns.length===0&&(
+          {visibleCamps.length===0&&(
             <div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"56px 24px",textAlign:"center"}}>
-              <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>Aún no hay campañas en {vt.label}</div>
-              <p style={{margin:"0 0 16px",color:C.muted,fontSize:13}}>Empezá creando la primera campaña.</p>
-              <Btn accent={vt.color} onClick={()=>setView("pickType")}>+ Crear campaña</Btn>
+              <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>{user.role==="admin"?`Aún no hay campañas en ${vt.label}`:"No tenés campañas asignadas"}</div>
+              {user.role==="admin"&&<><p style={{margin:"0 0 16px",color:C.muted,fontSize:13}}>Empezá creando la primera campaña.</p>
+              <Btn accent={vt.color} onClick={()=>setView("pickType")}>+ Crear campaña</Btn></>}
             </div>
           )}
         </>}
@@ -2810,7 +2874,7 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
                   <div style={{fontSize:11,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:4}}>{c.client}</div>
                   <h1 style={{margin:0,fontSize:24,fontWeight:800,color:C.text,letterSpacing:-0.4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</h1>
                 </div>
-                <button onClick={()=>setView("edit")} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.text,borderRadius:8,padding:"7px 14px",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:f.b}}>Editar</button>
+                {user.role==="admin"&&<button onClick={()=>setView("edit")} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.text,borderRadius:8,padding:"7px 14px",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:f.b}}>Editar</button>}
               </div>
 
               <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:18}}>
@@ -2820,6 +2884,11 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
                 <span style={{display:"inline-flex",alignItems:"center",gap:7,padding:"5px 12px",borderRadius:999,fontSize:12,fontWeight:600,background:sStatus.c+"15",color:sStatus.c,border:`1px solid ${sStatus.c}33`}}>
                   <span style={{width:6,height:6,borderRadius:"50%",background:sStatus.c}}/>{sStatus.l}
                 </span>
+                {(()=>{const pend=ratingPending(c);return pend!==null?(
+                  <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:999,fontSize:12,fontWeight:600,background:(pend>0?C.orange:C.green)+"15",color:pend>0?C.orange:C.green,border:`1px solid ${(pend>0?C.orange:C.green)}33`}}>
+                    <Icon name="star" size={11}/>{pend>0?`Falta calificar a ${pend}`:"Equipo calificado"}
+                  </span>
+                ):null;})()}
               </div>
 
               <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"20px 22px",marginBottom:14}}>
@@ -2911,16 +2980,16 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
                     <Icon name="star" size={16}/>Calificar equipo
                   </button>
                 )}
-                <button onClick={()=>setReportCamp(c)}
+                {user.role==="admin"&&<button onClick={()=>setReportCamp(c)}
                   style={{width:"100%",background:C.impl,color:pickTextOn(C.impl),border:"none",borderRadius:10,padding:"14px 20px",fontFamily:f.b,fontSize:14,fontWeight:700,cursor:"pointer",transition:"background .15s"}}
                   onMouseEnter={e=>e.currentTarget.style.background="#E59E0F"}
                   onMouseLeave={e=>e.currentTarget.style.background=C.impl}>
                   Generar reporte para cliente
-                </button>
-                <button onClick={()=>{if(window.confirm(`¿Eliminar la campaña "${c.name}"? Esta acción no se puede deshacer.`)) deleteCampaign(c.id);}}
+                </button>}
+                {user.role==="admin"&&<button onClick={()=>{if(window.confirm(`¿Eliminar la campaña "${c.name}"? Esta acción no se puede deshacer.`)) deleteCampaign(c.id);}}
                   style={{background:"transparent",border:"none",color:C.red,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:f.b,padding:"8px",alignSelf:"center"}}>
                   Eliminar campaña
-                </button>
+                </button>}
               </div>
             </div>
           );
@@ -2986,7 +3055,7 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
         {tab==="payments"&&<PaymentsTab allCampaigns={allCampaigns} reports={reports} workers={workers}/>}
 
         {/* WORKERS */}
-        {tab==="workers"&&<WorkersTab workers={workers} setWorkers={setWorkers} allCampaigns={allCampaigns}/>}
+        {tab==="workers"&&<WorkersTab workers={workers} setWorkers={setWorkers} allCampaigns={allCampaigns} ratings={ratings}/>}
 
         {/* CLIENTES */}
         {tab==="clients"&&<ClientsTab clients={clients} setClients={setClients} allCampaigns={allCampaigns} reports={reports}/>}
@@ -2996,7 +3065,7 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
       <div style={{position:"fixed",bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:"flex",padding:"6px 6px max(8px, env(safe-area-inset-bottom))",zIndex:10}}>
         <NavBtn id="dash"      icon="home"   label="Inicio"/>
         {user.role==="admin"&&<NavBtn id="clients"   icon="star"   label="Clientes"/>}
-        {user.role==="admin"&&<NavBtn id="campaigns" icon="target" label="Campañas"/>}
+        {(user.role==="admin"||user.role==="supervisor")&&<NavBtn id="campaigns" icon="target" label="Campañas"/>}
         <NavBtn id="approvals" icon="check"  label="Aprobar" badge={pendingCount}/>
         <NavBtn id="reports"   icon="chart"  label="Reportes"/>
         {user.role==="admin"&&<NavBtn id="payments"  icon="dollar" label="Pagos"/>}

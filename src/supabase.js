@@ -80,6 +80,8 @@ export const uploadClientLogo = async (file, clientName) => {
 
 // WORKER RATINGS — calificación del worker por el admin al cerrar una campaña
 // Una fila por (worker, campaña). scores = {puntualidad, calidad, comunicacion, presentacion}; score = promedio.
+export const getAllWorkerRatings = () =>
+  supabase.from('worker_ratings').select('*').order('created_at', { ascending: false });
 export const getCampaignRatings = (campaignId) =>
   supabase.from('worker_ratings').select('*').eq('campaign_id', campaignId);
 export const getWorkerRatings = (workerId) =>
