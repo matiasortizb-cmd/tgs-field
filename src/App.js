@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, updateReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo } from "./supabase";
+import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, updateReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo, getCampaignRatings, upsertWorkerRating, recalcWorkerRating } from "./supabase";
 import * as XLSX from "xlsx";
 import ClientReport from "./ClientReport";
 
@@ -86,6 +86,13 @@ const REGIONS_CL = Object.keys(COMUNAS_POR_REGION);
 const COMUNAS_CL = Object.values(COMUNAS_POR_REGION).flat();
 const BANKS_CL = ["Banco Chile","BCI","Santander","Scotiabank","Itaú","BICE","Banco Estado","HSBC","Falabella","Ripley"];
 const ACCOUNT_TYPES = ["Cuenta Corriente","Cuenta Vista","Cuenta RUT","Cuenta Ahorro"];
+// Criterios de calificación del worker (el score final es el promedio de los criterios calificados)
+const RATING_CRITERIA = [
+  {key:"puntualidad",  label:"Puntualidad"},
+  {key:"calidad",      label:"Calidad del trabajo"},
+  {key:"comunicacion", label:"Comunicación"},
+  {key:"presentacion", label:"Presentación / imagen"},
+];
 
 const INIT_WORKERS = [
   {id:"w1",name:"Carlos Muñoz",  rut:"12.345.678-9",phone:"+56912345678",email:"carlos@gmail.com",region:"RM — Metropolitana",comuna:"Maipú",roles:["implementador"],bank:"Banco Chile",accountType:"Cuenta Corriente",account:"1234567",status:"activo",rating:4.8,jobs:14,photo:"CM",lat:-33.511,lng:-70.763},
@@ -181,6 +188,18 @@ const Toggle=({value,onChange,color=C.green})=>(
 const Progress=({value,color})=>(
   <div style={{background:C.border,borderRadius:4,height:5,overflow:"hidden",marginTop:7}}>
     <div style={{width:`${value}%`,height:"100%",background:color,borderRadius:4,transition:"width 0.6s"}}/>
+  </div>
+);
+// Input de estrellas 1-5 (readOnly para solo lectura)
+const Stars=({value=0,onChange,size=26,readOnly=false})=>(
+  <div style={{display:"inline-flex",gap:3}}>
+    {[1,2,3,4,5].map(n=>(
+      <button key={n} type="button" disabled={readOnly} onClick={()=>onChange&&onChange(n===value?0:n)}
+        title={`${n}`}
+        style={{background:"none",border:"none",padding:1,margin:0,lineHeight:0,cursor:readOnly?"default":"pointer"}}>
+        <Icon name="star" size={size} color={n<=value?C.impl:C.border}/>
+      </button>
+    ))}
   </div>
 );
 const RoleSwitcher=({user,onChangeRole})=>{
@@ -2345,6 +2364,140 @@ const ClientsTab=({clients,setClients,allCampaigns,reports})=>{
 };
 
 // ─── ADMIN APP ────────────────────────────────────────────────────────────────
+// Pantalla de calificación del equipo al cerrar una campaña.
+// people: workers a calificar (team + supervisores). onSaved recibe {workerId: nuevoRatingPromedio}.
+const WorkerRatingModal=({campaign,people,ratedBy,onClose,onSaved})=>{
+  const [forms,setForms]=useState({});
+  const [loaded,setLoaded]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+
+  useEffect(()=>{
+    let alive=true;
+    (async()=>{
+      let byId={};
+      try{
+        const {data}=await getCampaignRatings(campaign.id);
+        (data||[]).forEach(r=>{byId[r.worker_id]=r;});
+      }catch{}
+      const init={};
+      people.forEach(p=>{
+        const ex=byId[p.id]||{};
+        const sc=ex.scores||{};
+        init[p.id]={
+          puntualidad:sc.puntualidad||0, calidad:sc.calidad||0,
+          comunicacion:sc.comunicacion||0, presentacion:sc.presentacion||0,
+          notes:ex.notes||"",
+        };
+      });
+      if(alive){setForms(init);setLoaded(true);}
+    })();
+    return ()=>{alive=false;};
+  },[campaign.id]);
+
+  const setField=(pid,key,val)=>setForms(prev=>({...prev,[pid]:{...prev[pid],[key]:val}}));
+  const avgOf=(fm)=>{
+    if(!fm) return 0;
+    const vals=RATING_CRITERIA.map(c=>fm[c.key]).filter(v=>v>0);
+    return vals.length? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  };
+  const ratedCount=people.filter(p=>avgOf(forms[p.id])>0).length;
+
+  const save=async()=>{
+    setErr("");setSaving(true);
+    const updated={};
+    try{
+      for(const p of people){
+        const fm=forms[p.id];
+        const avg=avgOf(fm);
+        if(avg===0) continue; // sin calificar → no se guarda
+        const scores={};
+        RATING_CRITERIA.forEach(c=>{ if(fm[c.key]>0) scores[c.key]=fm[c.key]; });
+        await upsertWorkerRating({
+          worker_id:p.id, worker_name:p.name,
+          campaign_id:campaign.id, campaign_name:campaign.name,
+          scores, score:Math.round(avg*10)/10, notes:(fm.notes||"").trim()||null,
+          rated_by:ratedBy||null,
+        });
+        const res=await recalcWorkerRating(p.id);
+        updated[p.id]=res.rating;
+      }
+      onSaved(updated);
+    }catch(e){
+      setErr(e.message||"Error al guardar las calificaciones. ¿Corriste el SQL de la tabla worker_ratings?");
+      setSaving(false);
+    }
+  };
+
+  const cvt=VERTICALS[campaign.type]||VERTICALS.impl;
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,padding:"20px 16px 120px",maxWidth:560,margin:"0 auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
+        <button onClick={onClose} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.text,borderRadius:8,padding:"6px 12px",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:f.b}}>←</button>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing:0.6,color:C.muted,textTransform:"uppercase",marginBottom:2}}>Calificar equipo</div>
+          <h1 style={{margin:0,fontSize:20,fontWeight:800,color:C.text,letterSpacing:-0.3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{campaign.name}</h1>
+        </div>
+      </div>
+      <p style={{color:C.muted,fontSize:13,margin:"0 0 18px"}}>Calificá a cada integrante por criterio. El promedio actualiza su rating de perfil.</p>
+
+      {!loaded ? (
+        <div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"40px 0"}}>Cargando…</div>
+      ) : people.length===0 ? (
+        <div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"40px 20px",textAlign:"center",color:C.muted,fontSize:13}}>Esta campaña no tiene equipo ni supervisores asignados.</div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          {people.map(p=>{
+            const fm=forms[p.id]||{};
+            const avg=avgOf(fm);
+            const rc=ROLE_META[(p.roles||[])[0]]?.color||cvt.color;
+            return(
+              <div key={p.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px 16px 18px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+                  <div style={{width:42,height:42,borderRadius:"50%",background:rc,color:pickTextOn(rc),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0,overflow:"hidden"}}>{avatarContent(p.photo,p.name)}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+                    <div style={{fontSize:11,color:C.muted,fontWeight:500,marginTop:2}}>{(p.roles||[]).map(r=>ROLE_META[r]?.label||r).join(" · ")||"—"}</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:20,fontWeight:800,color:avg>0?C.impl:C.muted,lineHeight:1}}>{avg>0?(Math.round(avg*10)/10):"—"}</div>
+                    <div style={{fontSize:10,color:C.muted,fontWeight:600,marginTop:2}}>promedio</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {RATING_CRITERIA.map(crit=>(
+                    <div key={crit.key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                      <span style={{fontSize:13,color:C.text,fontWeight:500}}>{crit.label}</span>
+                      <Stars value={fm[crit.key]||0} onChange={(v)=>setField(p.id,crit.key,v)} size={22}/>
+                    </div>
+                  ))}
+                </div>
+                <textarea value={fm.notes||""} onChange={e=>setField(p.id,"notes",e.target.value)}
+                  placeholder="Observaciones (opcional)…" rows={2}
+                  style={{width:"100%",marginTop:14,background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",boxSizing:"border-box",resize:"vertical"}}/>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {err && <div style={{marginTop:14,background:C.red+"12",border:`1px solid ${C.red}44`,borderRadius:10,padding:"10px 14px",color:C.red,fontSize:12,fontWeight:600}}>{err}</div>}
+
+      {loaded && people.length>0 && (
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,padding:"14px 16px max(14px, env(safe-area-inset-bottom))",display:"flex",gap:10,alignItems:"center",maxWidth:560,margin:"0 auto"}}>
+          <span style={{fontSize:12,color:C.muted,fontWeight:600,flex:1}}>{ratedCount} de {people.length} calificado{ratedCount!==1?"s":""}</span>
+          <button onClick={onClose} disabled={saving}
+            style={{background:"transparent",border:`1px solid ${C.border}`,color:C.text,borderRadius:10,padding:"11px 18px",fontFamily:f.b,fontSize:13,fontWeight:700,cursor:"pointer"}}>Cancelar</button>
+          <button onClick={save} disabled={saving||ratedCount===0}
+            style={{background:ratedCount===0?C.border:C.green,color:"#fff",border:"none",borderRadius:10,padding:"11px 22px",fontFamily:f.b,fontSize:13,fontWeight:700,cursor:saving||ratedCount===0?"not-allowed":"pointer",opacity:saving?0.7:1}}>
+            {saving?"Guardando…":"Guardar calificaciones"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const AdminApp=({user,onLogout,onChangeRole})=>{
   const [tab,setTab]         =useState("dash");
   const [vertical,setVert]   =useState("impl");
@@ -2358,6 +2511,7 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
   const [selected,setSel]    =useState(null);
   const [newType,setNewType] =useState(null);
   const [reportCamp,setReportCamp]=useState(null);
+  const [ratingCamp,setRatingCamp]=useState(null);
   const [approvalStatus,setApprovalStatus]=useState("pending");
   const [campaignStatusFilter,setCampaignStatusFilter]=useState(null);
 
@@ -2409,6 +2563,18 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
 
   // Client report
   if(reportCamp) return <ClientReport campaign={reportCamp} reports={reports} workers={workers} onClose={()=>setReportCamp(null)}/>;
+
+  // Calificación de equipo al cerrar campaña
+  if(ratingCamp){
+    const names=new Set([...(ratingCamp.team||[]),...(ratingCamp.supervisors||[])]);
+    const people=workers.filter(w=>names.has(w.name));
+    return <WorkerRatingModal campaign={ratingCamp} people={people} ratedBy={user.name||user.email}
+      onClose={()=>setRatingCamp(null)}
+      onSaved={(updated)=>{
+        setWorkers(prev=>prev.map(w=>updated[w.id]!=null?{...w,rating:updated[w.id]}:w));
+        setRatingCamp(null);
+      }}/>;
+  }
 
   // Campaign form screens
   if((view==="new"&&newType)||(view==="edit"&&selected))
@@ -2739,6 +2905,12 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
               </div>
 
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {c.status==="completada" && (
+                  <button onClick={()=>setRatingCamp(c)}
+                    style={{width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,background:C.green,color:"#fff",border:"none",borderRadius:10,padding:"14px 20px",fontFamily:f.b,fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                    <Icon name="star" size={16}/>Calificar equipo
+                  </button>
+                )}
                 <button onClick={()=>setReportCamp(c)}
                   style={{width:"100%",background:C.impl,color:pickTextOn(C.impl),border:"none",borderRadius:10,padding:"14px 20px",fontFamily:f.b,fontSize:14,fontWeight:700,cursor:"pointer",transition:"background .15s"}}
                   onMouseEnter={e=>e.currentTarget.style.background="#E59E0F"}

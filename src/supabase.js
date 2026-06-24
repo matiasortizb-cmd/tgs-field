@@ -78,6 +78,26 @@ export const uploadClientLogo = async (file, clientName) => {
   return supabase.storage.from('client-logos').getPublicUrl(path).data.publicUrl;
 };
 
+// WORKER RATINGS — calificación del worker por el admin al cerrar una campaña
+// Una fila por (worker, campaña). scores = {puntualidad, calidad, comunicacion, presentacion}; score = promedio.
+export const getCampaignRatings = (campaignId) =>
+  supabase.from('worker_ratings').select('*').eq('campaign_id', campaignId);
+export const getWorkerRatings = (workerId) =>
+  supabase.from('worker_ratings').select('*').eq('worker_id', workerId).order('created_at', { ascending: false });
+export const upsertWorkerRating = (row) =>
+  supabase.from('worker_ratings').upsert(row, { onConflict: 'worker_id,campaign_id' }).select().single();
+// Recalcula el rating del perfil del worker como promedio de todas sus calificaciones y lo persiste en workers.rating
+export const recalcWorkerRating = async (workerId) => {
+  const { data } = await supabase.from('worker_ratings').select('score').eq('worker_id', workerId);
+  if (data && data.length) {
+    const avg = data.reduce((s, r) => s + (Number(r.score) || 0), 0) / data.length;
+    const rounded = Math.round(avg * 10) / 10;
+    await updateWorker(workerId, { rating: rounded });
+    return { rating: rounded, count: data.length };
+  }
+  return { rating: 0, count: 0 };
+};
+
 // REPORTS
 // Form usa camelCase y campos como user/date; la tabla usa snake_case y worker_name/created_at
 const toDbReport = (r) => {
