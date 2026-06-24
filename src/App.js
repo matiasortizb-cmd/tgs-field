@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, updateReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo, getCampaignRatings, upsertWorkerRating, recalcWorkerRating, getAllWorkerRatings } from "./supabase";
+import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, updateReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, uploadCampaignDoc, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo, getCampaignRatings, upsertWorkerRating, recalcWorkerRating, getAllWorkerRatings } from "./supabase";
 import * as XLSX from "xlsx";
 import ClientReport from "./ClientReport";
 
@@ -2538,6 +2538,65 @@ const WorkerRatingModal=({campaign,people,ratedBy,onClose,onSaved})=>{
   );
 };
 
+// Envío de documentos al equipo por WhatsApp (sube el archivo y manda el link de descarga).
+const TeamDocSender=({campaign,workers})=>{
+  const fileRef=useRef();
+  const [target,setTarget]=useState(null);
+  const [sending,setSending]=useState(null);
+  const [note,setNote]=useState("");
+  const team=(campaign.team||[]).map(n=>workers.find(w=>w.name===n)||{name:n}).filter(Boolean);
+
+  const pick=(w)=>{ setTarget(w); if(fileRef.current){fileRef.current.value="";fileRef.current.click();} };
+  const onFile=async(e)=>{
+    const file=e.target.files&&e.target.files[0];
+    if(!file||!target){setTarget(null);return;}
+    const w=target; setSending(w.name);
+    try{
+      const url=await uploadCampaignDoc(file,campaign.id);
+      const first=(w.name||"").split(" ")[0];
+      const parts=[`Hola ${first} 👋`,""];
+      if(note.trim()){parts.push(note.trim(),"");}
+      parts.push(`Documento para la campaña *${campaign.name}*${campaign.client?` (${campaign.client})`:""}:`,url,"",`📎 ${file.name}`,"","Descargalo desde el link. Cualquier duda nos avisás. — TGS");
+      window.open(waLink(w.phone)+"?text="+encodeURIComponent(parts.join("\n")),"_blank");
+    }catch(err){
+      alert("No se pudo subir el archivo: "+(err.message||err)+"\n\n¿Está creado el bucket 'campaign-docs' en Supabase?");
+    }
+    setSending(null); setTarget(null);
+  };
+
+  if(!team.length) return null;
+  return(
+    <div style={{marginBottom:24}}>
+      <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:6}}>
+        <h2 style={{margin:0,fontSize:15,fontWeight:700,color:C.text,letterSpacing:-0.2}}>Enviar documentos al equipo</h2>
+      </div>
+      <p style={{margin:"0 0 12px",fontSize:12,color:C.muted,fontWeight:500}}>Subí un archivo (voucher de courier, instructivo, etc.) y se envía al worker por WhatsApp con un link de descarga.</p>
+      <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls" style={{display:"none"}} onChange={onFile}/>
+      <textarea value={note} onChange={e=>setNote(e.target.value)} rows={2} placeholder="Nota para el mensaje (opcional)… ej: Te enviamos el material por Starken, código 12345."
+        style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",boxSizing:"border-box",resize:"vertical",marginBottom:10}}/>
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
+        {team.map((w,i)=>{
+          const hasPhone=!!(w.phone&&w.phone.replace(/[^0-9]/g,"").length>=8);
+          const busy=sending===w.name;
+          return(
+            <div key={w.name} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderTop:i===0?"none":`1px solid ${C.border}`}}>
+              <div style={{width:34,height:34,borderRadius:"50%",background:(VERTICALS[campaign.type]||VERTICALS.impl).color,color:pickTextOn((VERTICALS[campaign.type]||VERTICALS.impl).color),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:12,flexShrink:0,overflow:"hidden"}}>{avatarContent(w.photo,w.name)}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{w.name}</div>
+                <div style={{fontSize:11,color:C.muted,fontWeight:500,marginTop:1}}>{hasPhone?w.phone:"Sin teléfono registrado"}</div>
+              </div>
+              <button onClick={()=>hasPhone&&!busy&&pick(w)} disabled={!hasPhone||busy}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:10,border:"none",background:hasPhone?"#25D366":C.border,color:"#fff",fontFamily:f.b,fontSize:12,fontWeight:700,cursor:hasPhone&&!busy?"pointer":"not-allowed",opacity:busy?0.6:1,flexShrink:0}}>
+                <Icon name="message" size={14}/>{busy?"Subiendo…":"Enviar archivo"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const AdminApp=({user,onLogout,onChangeRole})=>{
   const [tab,setTab]         =useState("dash");
   const [vertical,setVert]   =useState("impl");
@@ -2942,6 +3001,8 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
                   </div>
                 )}
               </div>
+
+              {user.role==="admin" && <TeamDocSender campaign={c} workers={workers}/>}
 
               <div style={{marginBottom:24}}>
                 <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
