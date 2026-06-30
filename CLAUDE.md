@@ -220,6 +220,45 @@ Bloque grande de mejoras al flow de **clientes, items por reporte, asignación d
 2. **Migración Fase 3 de clientes** (mover strings `Coca-Cola`, `Mars`, etc. a registros reales con `client_id`) — el SQL está documentado pero no se corrió.
 3. **Pre-carga de reporte para Promo/Mec**: replicado el patrón. Los forms cambiaron de fotos fijas a items dinámicos: si hay reportes viejos en producción con la estructura anterior, mostrarlos puede dar nulls.
 
+## Estado al 30 de junio de 2026
+
+Sesión enfocada en **gestión de workers, calificación post-campaña, reporte corporativo e infraestructura de deploy**.
+
+### Schema nuevo en Supabase
+
+- `worker_ratings` (tabla, RLS abierta a anon): calificación del worker por el admin al cerrar campaña. Columnas: `worker_id` (FK), `worker_name`, `campaign_id` (FK), `campaign_name`, `scores jsonb` (`{puntualidad, calidad, comunicacion, presentacion}`), `score numeric(3,1)` (promedio), `notes`, `rated_by`, `created_at`, `unique(worker_id, campaign_id)`. El `workers.rating` pasó a ser el **promedio** de todas las filas del worker (lo recalcula `recalcWorkerRating` en `src/supabase.js`).
+
+### Gestión de workers (WorkersTab)
+
+- Buscador de texto ahora matchea por **nombre, RUT, comuna y región**.
+- Filtros **Región** (lista canónica `REGIONS_CL`, siempre completa) y **Ciudad/Comuna** (acotada a la región vía `COMUNAS_POR_REGION`).
+- Selector de **orden**: mejor rating (default) / más trabajos / nombre.
+- Contador de resultados + botón "Limpiar filtros".
+- En el perfil del worker, sección **"Calificaciones"** con el historial por campaña (score, criterios, observaciones).
+
+### Calificación del worker por campaña
+
+- Componente `Stars` (input 1-5) + pantalla `WorkerRatingModal`. Botón **"Calificar equipo"** en el detalle de campaña, visible sólo si `status==="completada"`.
+- Califica al **team de terreno + supervisores** por 4 criterios → promedio → `worker_ratings` (upsert, re-editable).
+- Badge **"Falta calificar a N" / "Equipo calificado"** en la lista y el detalle de campañas completadas (`getAllWorkerRatings` carga todo al entrar).
+- El **supervisor** ahora ve el tab Campañas (sólo las que supervisa) y puede calificar; Editar/Eliminar/Reporte quedan sólo para admin.
+
+### Reporte para cliente (`src/ClientReport.js`) — rediseño corporativo
+
+- Diseño **híbrido**: portada y cierre en negro de marca, páginas internas en blanco, acento amarillo TGS (`#F5A623`).
+- **Co-branding**: logo TGS (`public/brand/tgs-logo-tagline.jpg`) + logo del cliente (`client.logo_url`), cargados como data URL para incrustarse en el `.pptx` (se pasan `clients` a `ClientReport`).
+- KPIs en cards claras, tabla limpia, tarjetas de incidencia, números de página. La preview en pantalla refleja el PPT. Export async con estado "Generando…".
+
+### Infraestructura de deploy
+
+- **Auto-deploy GitHub→Vercel se rompió (~24/06) y se reparó** reconectando el repo por CLI: `npx vercel git disconnect --yes` + `npx vercel git connect --yes` (re-registra el webhook). Verificado con un push que disparó deploy automático.
+- Deploy manual de respaldo: `npx vercel login` (cuenta `matiasortizb-cmd`) una vez, luego `npx vercel --prod --yes`.
+
+### TODOs activos al 30 de junio
+
+1. **Revertir el bypass de login `tgsdev2026`** antes de cualquier release público (sigue siendo agujero de seguridad si el Email provider de Supabase ya está activo).
+2. Migración Fase 3 de clientes (igual que antes, sin correr).
+
 ## Comandos útiles
 
 ```bash

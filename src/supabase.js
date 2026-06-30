@@ -200,21 +200,6 @@ export const uploadAvatar = async (file, label) => {
   if (error) throw error;
   return supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
 };
-// Registro de documentos enviados al equipo (historial por campaña/worker)
-export const getCampaignDocs = (campaignId) =>
-  supabase.from('campaign_docs').select('*').eq('campaign_id', campaignId).order('created_at', { ascending: false });
-export const insertCampaignDoc = (row) =>
-  supabase.from('campaign_docs').insert(row).select().single();
-
-// Documentos que el admin envía al equipo (vouchers de courier, instructivos, etc.) → URL pública para mandar por WhatsApp
-export const uploadCampaignDoc = async (file, campaignId) => {
-  const ext = (file.name.split('.').pop() || 'dat').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const base = (file.name.replace(/\.[^.]+$/, '') || 'doc').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 40);
-  const path = `${campaignId || 'c'}/${Date.now()}-${base}.${ext}`;
-  const { error } = await supabase.storage.from('campaign-docs').upload(path, file);
-  if (error) throw error;
-  return supabase.storage.from('campaign-docs').getPublicUrl(path).data.publicUrl;
-};
 export const uploadBoleta = async (file, workerId, campaignId) => {
   const ext = file.name.split('.').pop();
   const path = `${campaignId}/${workerId}/${Date.now()}.${ext}`;

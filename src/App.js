@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, updateReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, uploadCampaignDoc, getCampaignDocs, insertCampaignDoc, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo, getCampaignRatings, upsertWorkerRating, recalcWorkerRating, getAllWorkerRatings } from "./supabase";
+import { getWorkers, getCampaigns, getReports, getBoletas, insertReport, updateReport, insertWorker, updateWorker, insertCampaign, updateCampaign, deleteCampaign, fromDbCampaign, fromDbReport, updateReportStatus, updateReportApproval, updateReportItems, insertBoleta, uploadBoleta, updateBoletaStatus, uploadPhoto, uploadAvatar, signUp, signIn, signOut, getSession, getWorkerByEmail, getClients, insertClient, updateClient, deleteClient, uploadClientLogo, getCampaignRatings, upsertWorkerRating, recalcWorkerRating, getAllWorkerRatings } from "./supabase";
 import * as XLSX from "xlsx";
 import ClientReport from "./ClientReport";
 
@@ -1216,15 +1216,6 @@ const CampaignForm=({type,initial,onSave,onCancel,workers:dbWorkers,clients:dbCl
               <FormPersonRow key={p.id} person={p} active={form.team.includes(p.name)} onClick={()=>toggleTeam(p.name)} activeColor={vt.color}/>
             ))}
           </FormSection>
-
-          {form.team.length>0 && (
-            <FormSection>
-              {form._saved&&form.id
-                ? <TeamDocSender campaign={form} workers={dbWorkers}/>
-                : <>{sectionTitle("Documentos al equipo","Vouchers de courier, instructivos, etc.")}
-                    <div style={{padding:"16px",textAlign:"center",color:C.muted,fontSize:13,border:`1px dashed ${C.border}`,borderRadius:10}}>Guardá la campaña para habilitar el envío de documentos al equipo por WhatsApp.</div></>}
-            </FormSection>
-          )}
 
           <FormSection>
             {sectionTitle("Supervisores","Pueden supervisar múltiples puntos")}
@@ -2547,115 +2538,6 @@ const WorkerRatingModal=({campaign,people,ratedBy,onClose,onSaved})=>{
   );
 };
 
-// Envío de documentos al equipo por WhatsApp: sube el archivo UNA vez y lo manda (link) a cada worker; guarda historial.
-const TeamDocSender=({campaign,workers,sentBy})=>{
-  const fileRef=useRef();
-  const [note,setNote]=useState("");
-  const [doc,setDoc]=useState(null);       // {url, name}
-  const [uploading,setUploading]=useState(false);
-  const [history,setHistory]=useState([]);
-  const [sentNow,setSentNow]=useState({}); // {workerName:true} en esta sesión
-  const team=(campaign.team||[]).map(n=>workers.find(w=>w.name===n)||{name:n}).filter(Boolean);
-  const phoneOk=(w)=>!!(w.phone&&w.phone.replace(/[^0-9]/g,"").length>=8);
-  const reachable=team.filter(phoneOk);
-  const accent=(VERTICALS[campaign.type]||VERTICALS.impl).color;
-
-  useEffect(()=>{
-    let alive=true;
-    if(campaign.id) getCampaignDocs(campaign.id).then(({data})=>{ if(alive&&data) setHistory(data); }).catch(()=>{});
-    return ()=>{alive=false;};
-  },[campaign.id]);
-
-  const onUpload=async(e)=>{
-    const file=e.target.files&&e.target.files[0]; if(!file) return;
-    setUploading(true);
-    try{ const url=await uploadCampaignDoc(file,campaign.id); setDoc({url,name:file.name}); setSentNow({}); }
-    catch(err){ alert("No se pudo subir el archivo: "+(err.message||err)+"\n\n¿Está creado el bucket 'campaign-docs' en Supabase?"); }
-    setUploading(false);
-  };
-
-  const buildMsg=(w)=>{
-    const first=(w.name||"").split(" ")[0];
-    const parts=[`Hola ${first} 👋`,""];
-    if(note.trim()){parts.push(note.trim(),"");}
-    parts.push(`Documento para la campaña *${campaign.name}*${campaign.client?` (${campaign.client})`:""}:`,doc.url,"",`📎 ${doc.name}`,"","Descargalo desde el link. Cualquier duda nos avisás. — TGS");
-    return parts.join("\n");
-  };
-  const register=(w)=>{
-    setSentNow(p=>({...p,[w.name]:true}));
-    if(campaign.id) insertCampaignDoc({campaign_id:campaign.id,campaign_name:campaign.name,worker_id:w.id||null,worker_name:w.name,file_name:doc.name,file_url:doc.url,note:note.trim()||null,sent_by:sentBy||null})
-      .then(({data})=>{ if(data) setHistory(h=>[data,...h]); }).catch(()=>{});
-  };
-  const sendOne=(w)=>{ if(!doc||!phoneOk(w)) return; window.open(waLink(w.phone)+"?text="+encodeURIComponent(buildMsg(w)),"_blank"); register(w); };
-  const sendAll=()=>{ if(!doc) return; reachable.forEach(w=>window.open(waLink(w.phone)+"?text="+encodeURIComponent(buildMsg(w)),"_blank")); reachable.forEach(register); };
-
-  if(!team.length) return null;
-  return(
-    <div style={{marginBottom:24}}>
-      <h2 style={{margin:"0 0 6px",fontSize:15,fontWeight:700,color:C.text,letterSpacing:-0.2}}>Enviar documentos al equipo</h2>
-      <p style={{margin:"0 0 12px",fontSize:12,color:C.muted,fontWeight:500}}>Subí un archivo (voucher de courier, instructivo, etc.) una vez y mandalo por WhatsApp a todo el equipo o a cada worker. Va el link de descarga.</p>
-      <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls" style={{display:"none"}} onChange={onUpload}/>
-      <textarea value={note} onChange={e=>setNote(e.target.value)} rows={2} placeholder="Nota para el mensaje (opcional)… ej: Te enviamos el material por Starken, código 12345."
-        style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",color:C.text,fontFamily:f.b,fontSize:13,outline:"none",boxSizing:"border-box",resize:"vertical",marginBottom:10}}/>
-
-      {!doc ? (
-        <button onClick={()=>{if(fileRef.current){fileRef.current.value="";fileRef.current.click();}}} disabled={uploading}
-          style={{width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px 16px",borderRadius:10,border:`1.5px dashed ${C.border}`,background:C.surface,color:C.text,fontFamily:f.b,fontSize:13,fontWeight:700,cursor:uploading?"wait":"pointer"}}>
-          {uploading?"Subiendo…":"📎 Subir documento"}
-        </button>
-      ) : (
-        <>
-          <div style={{display:"flex",alignItems:"center",gap:10,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px",marginBottom:10}}>
-            <Icon name="check" size={16} color={C.green}/>
-            <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:C.text,textDecoration:"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{doc.name}</a>
-            <button onClick={()=>{if(fileRef.current){fileRef.current.value="";fileRef.current.click();}}} style={{background:"transparent",border:"none",color:C.muted,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:f.b,flexShrink:0}}>Cambiar</button>
-          </div>
-          {reachable.length>1 && (
-            <button onClick={sendAll}
-              style={{width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px 16px",borderRadius:10,border:"none",background:"#25D366",color:"#fff",fontFamily:f.b,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:10}}>
-              <Icon name="message" size={15}/>Enviar a todo el equipo ({reachable.length})
-            </button>
-          )}
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
-            {team.map((w,i)=>{
-              const ok=phoneOk(w); const sent=sentNow[w.name];
-              return(
-                <div key={w.name} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderTop:i===0?"none":`1px solid ${C.border}`}}>
-                  <div style={{width:34,height:34,borderRadius:"50%",background:accent,color:pickTextOn(accent),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:12,flexShrink:0,overflow:"hidden"}}>{avatarContent(w.photo,w.name)}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{w.name}</div>
-                    <div style={{fontSize:11,color:C.muted,fontWeight:500,marginTop:1}}>{ok?w.phone:"Sin teléfono registrado"}</div>
-                  </div>
-                  <button onClick={()=>sendOne(w)} disabled={!ok}
-                    style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:10,border:sent?`1px solid ${C.green}55`:"none",background:sent?"transparent":(ok?"#25D366":C.border),color:sent?C.green:"#fff",fontFamily:f.b,fontSize:12,fontWeight:700,cursor:ok?"pointer":"not-allowed",flexShrink:0}}>
-                    <Icon name={sent?"check":"message"} size={14}/>{sent?"Enviado":"Enviar"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {history.length>0 && (
-        <div style={{marginTop:14}}>
-          <div style={{fontSize:10,fontWeight:700,letterSpacing:0.8,color:C.muted,textTransform:"uppercase",marginBottom:8}}>Enviados ({history.length})</div>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {history.slice(0,8).map(h=>(
-              <div key={h.id} style={{display:"flex",alignItems:"center",gap:10,fontSize:12,color:C.muted}}>
-                <Icon name="check" size={12} color={C.green}/>
-                <a href={h.file_url} target="_blank" rel="noopener noreferrer" style={{color:C.text,fontWeight:600,textDecoration:"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:160}}>{h.file_name}</a>
-                <span>→ {h.worker_name}</span>
-                <span style={{marginLeft:"auto",flexShrink:0}}>{h.created_at?new Date(h.created_at).toLocaleDateString("es-CL",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):""}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 const AdminApp=({user,onLogout,onChangeRole})=>{
   const [tab,setTab]         =useState("dash");
   const [vertical,setVert]   =useState("impl");
@@ -3060,8 +2942,6 @@ const AdminApp=({user,onLogout,onChangeRole})=>{
                   </div>
                 )}
               </div>
-
-              {user.role==="admin" && <TeamDocSender campaign={c} workers={workers} sentBy={user.name||user.email}/>}
 
               <div style={{marginBottom:24}}>
                 <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
